@@ -15,15 +15,19 @@ use chrono::NaiveDate;
 use rusqlite::Connection;
 
 pub use imports::ImportRecord;
-pub use transactions::{InsertSummary, TransactionFilter};
 pub(crate) use transactions::build_where;
+pub use transactions::{InsertSummary, TransactionFilter};
 pub use widgets::{NewWidget, Widget, WidgetPlacement};
 
 /// Migraciones aplicadas en orden. Añadir una nueva es añadir una línea aquí y
 /// un fichero en `migrations/`; nunca se edita una migración ya publicada,
 /// porque las bases de datos de los usuarios ya la habrán aplicado.
 const MIGRATIONS: &[(i64, &str, &str)] = &[
-    (1, "initial", include_str!("../../migrations/0001_initial.sql")),
+    (
+        1,
+        "initial",
+        include_str!("../../migrations/0001_initial.sql"),
+    ),
     (
         2,
         "seed_categories",
@@ -175,7 +179,9 @@ mod tests {
         db.migrate().expect("second migration run is a no-op");
         let applied: i64 = db
             .connection()
-            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| {
+                row.get(0)
+            })
             .unwrap();
         assert_eq!(applied, MIGRATIONS.len() as i64);
     }
@@ -199,6 +205,9 @@ mod tests {
              VALUES (999, '2026-01-01', 'orphan', -100, 'manual', 'deadbeef')",
             [],
         );
-        assert!(result.is_err(), "una transacción huérfana debe ser rechazada");
+        assert!(
+            result.is_err(),
+            "una transacción huérfana debe ser rechazada"
+        );
     }
 }

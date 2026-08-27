@@ -64,5 +64,8 @@ pub fn correct_transaction_category(
         CategorizationSummary::default()
     };
 
-    Ok(CorrectionResult { learned_rule, applied })
+    Ok(CorrectionResult {
+        learned_rule,
+        applied,
+    })
 }

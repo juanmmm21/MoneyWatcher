@@ -34,7 +34,9 @@ impl AccountKind {
     }
 
     pub fn from_str_opt(raw: &str) -> Option<Self> {
-        AccountKind::ALL.into_iter().find(|kind| kind.as_str() == raw)
+        AccountKind::ALL
+            .into_iter()
+            .find(|kind| kind.as_str() == raw)
     }
 }
 

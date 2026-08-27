@@ -70,7 +70,9 @@ impl Database {
             return Ok(None);
         }
 
-        Ok(Some(self.transaction(TransactionId(conn.last_insert_rowid()))?))
+        Ok(Some(
+            self.transaction(TransactionId(conn.last_insert_rowid()))?,
+        ))
     }
 
     /// Inserta un lote completo dentro de una única transacción SQL: si algo
@@ -136,7 +138,8 @@ impl Database {
 
     pub fn transactions(&self, filter: &TransactionFilter) -> StorageResult<Vec<Transaction>> {
         let (where_clause, mut values) = build_where(filter);
-        let mut sql = format!("{SELECT_TRANSACTION}{where_clause} ORDER BY t.booked_on DESC, t.id DESC");
+        let mut sql =
+            format!("{SELECT_TRANSACTION}{where_clause} ORDER BY t.booked_on DESC, t.id DESC");
 
         if let Some(limit) = filter.limit {
             values.push(Value::from(i64::from(limit)));
@@ -204,9 +207,10 @@ impl Database {
     }
 
     pub fn delete_transaction(&self, id: TransactionId) -> StorageResult<()> {
-        let deleted = self
-            .connection()
-            .execute("DELETE FROM transactions WHERE id = ?1", params![id.value()])?;
+        let deleted = self.connection().execute(
+            "DELETE FROM transactions WHERE id = ?1",
+            params![id.value()],
+        )?;
         if deleted == 0 {
             return Err(StorageError::NotFound {
                 entity: "transaction",
@@ -229,8 +233,8 @@ impl Database {
             let mut statement =
                 tx.prepare("UPDATE transactions SET category_id = ?2 WHERE id = ?1")?;
             for id in ids {
-                updated += statement
-                    .execute(params![id.value(), category_id.map(CategoryId::value)])?;
+                updated +=
+                    statement.execute(params![id.value(), category_id.map(CategoryId::value)])?;
             }
         }
         tx.commit()?;
@@ -238,7 +242,8 @@ impl Database {
     }
 }
 
-const SELECT_TRANSACTION: &str = "SELECT t.id, t.account_id, t.booked_on, t.value_on, t.description,
+const SELECT_TRANSACTION: &str =
+    "SELECT t.id, t.account_id, t.booked_on, t.value_on, t.description,
         t.counterparty, t.amount, t.balance_after, t.category_id, t.notes,
         t.source, t.import_id, t.fingerprint
  FROM transactions t";
@@ -250,7 +255,8 @@ pub(crate) fn build_where(filter: &TransactionFilter) -> (String, Vec<Value>) {
     let mut values: Vec<Value> = Vec::new();
 
     if !filter.account_ids.is_empty() {
-        let placeholders = placeholders(&mut values, filter.account_ids.iter().map(|id| id.value()));
+        let placeholders =
+            placeholders(&mut values, filter.account_ids.iter().map(|id| id.value()));
         clauses.push(format!("t.account_id IN ({placeholders})"));
     }
 
@@ -280,7 +286,12 @@ pub(crate) fn build_where(filter: &TransactionFilter) -> (String, Vec<Value>) {
         clauses.push("t.category_id IS NULL".to_string());
     }
 
-    if let Some(search) = filter.search.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+    if let Some(search) = filter
+        .search
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
         values.push(Value::from(format!("%{search}%")));
         let index = values.len();
         clauses.push(format!(
@@ -391,14 +402,23 @@ mod tests {
 
         assert_eq!(stored.amount, Money::from_minor_units(-4_512));
         assert_eq!(stored.direction(), Direction::Expense);
-        assert_eq!(db.account_balance(account_id).unwrap().minor_units(), -4_512);
+        assert_eq!(
+            db.account_balance(account_id).unwrap().minor_units(),
+            -4_512
+        );
     }
 
     #[test]
     fn ignores_duplicates_on_reimport() {
         let (db, account_id) = seeded_db();
-        assert!(db.insert_transaction(&tx(account_id, 3, "MERCADONA", -4_512)).unwrap().is_some());
-        assert!(db.insert_transaction(&tx(account_id, 3, "Mercadona.", -4_512)).unwrap().is_none());
+        assert!(db
+            .insert_transaction(&tx(account_id, 3, "MERCADONA", -4_512))
+            .unwrap()
+            .is_some());
+        assert!(db
+            .insert_transaction(&tx(account_id, 3, "Mercadona.", -4_512))
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -411,7 +431,13 @@ mod tests {
         ];
 
         let summary = db.insert_transactions(&batch).unwrap();
-        assert_eq!(summary, InsertSummary { inserted: 2, duplicates: 1 });
+        assert_eq!(
+            summary,
+            InsertSummary {
+                inserted: 2,
+                duplicates: 1
+            }
+        );
     }
 
     #[test]
@@ -461,7 +487,10 @@ mod tests {
         .unwrap();
 
         let pending = db
-            .transactions(&TransactionFilter { uncategorized_only: true, ..Default::default() })
+            .transactions(&TransactionFilter {
+                uncategorized_only: true,
+                ..Default::default()
+            })
             .unwrap();
         assert_eq!(pending.len(), 2);
 
@@ -470,7 +499,10 @@ mod tests {
         assert_eq!(db.categorize_many(&ids, Some(groceries.id)).unwrap(), 2);
 
         let still_pending = db
-            .transactions(&TransactionFilter { uncategorized_only: true, ..Default::default() })
+            .transactions(&TransactionFilter {
+                uncategorized_only: true,
+                ..Default::default()
+            })
             .unwrap();
         assert!(still_pending.is_empty());
     }
@@ -486,10 +518,18 @@ mod tests {
         .unwrap();
 
         let page = db
-            .transactions(&TransactionFilter { limit: Some(2), offset: Some(1), ..Default::default() })
+            .transactions(&TransactionFilter {
+                limit: Some(2),
+                offset: Some(1),
+                ..Default::default()
+            })
             .unwrap();
         assert_eq!(page.len(), 2);
         assert_eq!(page[0].description, "B");
-        assert_eq!(db.count_transactions(&TransactionFilter::default()).unwrap(), 3);
+        assert_eq!(
+            db.count_transactions(&TransactionFilter::default())
+                .unwrap(),
+            3
+        );
     }
 }

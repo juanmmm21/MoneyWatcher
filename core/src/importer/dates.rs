@@ -73,7 +73,11 @@ fn expand_year(raw: &str) -> Option<i32> {
     let value: i32 = raw.parse().ok()?;
     match raw.len() {
         4 => Some(value),
-        2 => Some(if value >= 69 { 1900 + value } else { 2000 + value }),
+        2 => Some(if value >= 69 {
+            1900 + value
+        } else {
+            2000 + value
+        }),
         _ => None,
     }
 }
@@ -136,7 +140,10 @@ mod tests {
     #[test]
     fn parses_two_digit_years_and_trailing_time() {
         let order = DateOrder::DayFirst;
-        assert_eq!(parse("03/04/26", order), NaiveDate::from_ymd_opt(2026, 4, 3));
+        assert_eq!(
+            parse("03/04/26", order),
+            NaiveDate::from_ymd_opt(2026, 4, 3)
+        );
         assert_eq!(
             parse("03/04/2026 18:22", order),
             NaiveDate::from_ymd_opt(2026, 4, 3)

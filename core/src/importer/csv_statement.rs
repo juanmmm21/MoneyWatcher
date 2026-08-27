@@ -104,7 +104,10 @@ pub fn parse_csv(bytes: &[u8]) -> Result<StatementPreview, ImportError> {
             continue;
         };
         let score = candidate.score();
-        if best.as_ref().is_none_or(|(best_score, _)| score > *best_score) {
+        if best
+            .as_ref()
+            .is_none_or(|(best_score, _)| score > *best_score)
+        {
             best = Some((score, candidate));
         }
     }
@@ -152,10 +155,16 @@ fn find_header(text: &str, delimiter: u8) -> Result<Option<Candidate>, ImportErr
     let mut rows: Vec<(u64, Vec<String>)> = Vec::new();
     for record in reader.records() {
         let record = record?;
-        let line = record.position().map(|position| position.line()).unwrap_or(0);
+        let line = record
+            .position()
+            .map(|position| position.line())
+            .unwrap_or(0);
         rows.push((
             line,
-            record.iter().map(|field| field.trim().to_string()).collect(),
+            record
+                .iter()
+                .map(|field| field.trim().to_string())
+                .collect(),
         ));
     }
 
@@ -205,7 +214,10 @@ fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
 
     for (line, record) in &candidate.records {
         let line = *line;
-        let raw_date = record.get(candidate.mapping.booked_on).cloned().unwrap_or_default();
+        let raw_date = record
+            .get(candidate.mapping.booked_on)
+            .cloned()
+            .unwrap_or_default();
         let Some(booked_on) = dates::parse(&raw_date, order) else {
             skipped.push(SkippedRow {
                 line,

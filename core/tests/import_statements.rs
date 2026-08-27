@@ -5,8 +5,11 @@ use moneywatcher_core::domain::{AccountId, Money};
 use moneywatcher_core::importer::{parse_csv, AmountColumns, ImportError};
 
 fn fixture(name: &str) -> Vec<u8> {
-    std::fs::read(format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR")))
-        .unwrap_or_else(|error| panic!("no se pudo leer la fixture {name}: {error}"))
+    std::fs::read(format!(
+        "{}/tests/fixtures/{name}",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap_or_else(|error| panic!("no se pudo leer la fixture {name}: {error}"))
 }
 
 #[test]
@@ -14,7 +17,10 @@ fn parses_spanish_statement_with_preamble_and_semicolons() {
     let preview = parse_csv(&fixture("bank_es_semicolon.csv")).expect("extracto legible");
 
     assert_eq!(preview.delimiter, ';');
-    assert_eq!(preview.header_line, 5, "la cabecera va tras el preámbulo del banco");
+    assert_eq!(
+        preview.header_line, 5,
+        "la cabecera va tras el preámbulo del banco"
+    );
     assert_eq!(preview.rows.len(), 5);
 
     let salary = &preview.rows[0];
@@ -25,12 +31,18 @@ fn parses_spanish_statement_with_preamble_and_semicolons() {
 
     let groceries = &preview.rows[1];
     assert_eq!(groceries.amount, Money::from_minor_units(-4_512));
-    assert_eq!(groceries.value_on.map(|d| d.to_string()), Some("2026-03-05".to_string()));
+    assert_eq!(
+        groceries.value_on.map(|d| d.to_string()),
+        Some("2026-03-05".to_string())
+    );
 
     // La fila de totales no tiene fecha y se descarta explicando por qué.
     assert_eq!(preview.skipped.len(), 1);
     assert!(preview.skipped[0].reason.contains("unreadable date"));
-    assert_eq!(preview.skipped[0].line, 12, "la fila descartada se identifica por su línea");
+    assert_eq!(
+        preview.skipped[0].line, 12,
+        "la fila descartada se identifica por su línea"
+    );
 }
 
 #[test]
@@ -38,7 +50,10 @@ fn parses_debit_and_credit_columns_into_signed_amounts() {
     let preview = parse_csv(&fixture("bank_uk_debit_credit.csv")).expect("extracto legible");
 
     assert_eq!(preview.delimiter, ',');
-    assert!(matches!(preview.mapping.amount, AmountColumns::DebitCredit { .. }));
+    assert!(matches!(
+        preview.mapping.amount,
+        AmountColumns::DebitCredit { .. }
+    ));
     assert_eq!(preview.rows.len(), 4);
 
     assert_eq!(preview.rows[0].amount, Money::from_minor_units(185_000));

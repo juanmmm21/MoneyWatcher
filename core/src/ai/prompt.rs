@@ -161,7 +161,10 @@ mod tests {
         let answer = "Sure! Here you go:\n```json\n[{\"index\":0,\"category\":\"groceries\",\"confidence\":91}]\n```";
         let parsed = parse_suggestions(answer, 2, &categories()).unwrap();
         assert_eq!(parsed.len(), 1);
-        assert_eq!(parsed[0].category_name, "Groceries", "la categoría se normaliza a la real");
+        assert_eq!(
+            parsed[0].category_name, "Groceries",
+            "la categoría se normaliza a la real"
+        );
         assert_eq!(parsed[0].confidence, 91);
     }
 
@@ -175,7 +178,10 @@ mod tests {
         let parsed = parse_suggestions(answer, 2, &categories()).unwrap();
         assert_eq!(parsed.len(), 1);
         assert_eq!(parsed[0].index, 1);
-        assert_eq!(parsed[0].confidence, 50, "sin confianza declarada se asume media");
+        assert_eq!(
+            parsed[0].confidence, 50,
+            "sin confianza declarada se asume media"
+        );
     }
 
     #[test]

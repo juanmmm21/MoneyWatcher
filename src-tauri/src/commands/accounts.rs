@@ -31,11 +31,17 @@ pub fn list_accounts(
 }
 
 #[tauri::command]
-pub fn create_account(state: State<'_, AppState>, account: NewAccount) -> CommandResult<AccountView> {
+pub fn create_account(
+    state: State<'_, AppState>,
+    account: NewAccount,
+) -> CommandResult<AccountView> {
     let database = state.database()?;
     let created = database.create_account(&account)?;
     let balance = database.account_balance(created.id)?;
-    Ok(AccountView { account: created, balance })
+    Ok(AccountView {
+        account: created,
+        balance,
+    })
 }
 
 #[tauri::command]

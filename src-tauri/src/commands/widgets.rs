@@ -32,7 +32,9 @@ pub fn update_widget(
     title: String,
     config: serde_json::Value,
 ) -> CommandResult<Widget> {
-    Ok(state.database()?.update_widget(widget_id, &title, &config)?)
+    Ok(state
+        .database()?
+        .update_widget(widget_id, &title, &config)?)
 }
 
 #[tauri::command]

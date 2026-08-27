@@ -157,7 +157,10 @@ mod tests {
         let accounts = db.accounts(false).unwrap();
         assert_eq!(accounts.len(), 2);
         assert_eq!(accounts[0].bank, "BBVA");
-        assert_eq!(accounts[0].currency, "EUR", "la divisa se normaliza a mayúsculas");
+        assert_eq!(
+            accounts[0].currency, "EUR",
+            "la divisa se normaliza a mayúsculas"
+        );
     }
 
     #[test]
@@ -181,6 +184,9 @@ mod tests {
     fn balance_starts_at_opening_balance() {
         let db = Database::open_in_memory().unwrap();
         let account = db.create_account(&sample("Santander", "Main")).unwrap();
-        assert_eq!(db.account_balance(account.id).unwrap(), Money::from_minor_units(100_000));
+        assert_eq!(
+            db.account_balance(account.id).unwrap(),
+            Money::from_minor_units(100_000)
+        );
     }
 }

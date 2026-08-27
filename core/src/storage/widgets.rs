@@ -57,7 +57,11 @@ impl Database {
 
     pub fn widget(&self, id: i64) -> StorageResult<Widget> {
         self.connection()
-            .query_row(&format!("{SELECT_WIDGET} WHERE id = ?1"), params![id], map_widget)
+            .query_row(
+                &format!("{SELECT_WIDGET} WHERE id = ?1"),
+                params![id],
+                map_widget,
+            )
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => StorageError::NotFound {
                     entity: "widget",
@@ -90,7 +94,10 @@ impl Database {
             params![id, title.trim(), config.to_string()],
         )?;
         if updated == 0 {
-            return Err(StorageError::NotFound { entity: "widget", id });
+            return Err(StorageError::NotFound {
+                entity: "widget",
+                id,
+            });
         }
         self.widget(id)
     }
@@ -105,7 +112,13 @@ impl Database {
                  WHERE id = ?1",
             )?;
             for (id, placement) in layout {
-                statement.execute(params![id, placement.x, placement.y, placement.w, placement.h])?;
+                statement.execute(params![
+                    id,
+                    placement.x,
+                    placement.y,
+                    placement.w,
+                    placement.h
+                ])?;
             }
         }
         tx.commit()?;
@@ -117,7 +130,10 @@ impl Database {
             .connection()
             .execute("DELETE FROM dashboard_widgets WHERE id = ?1", params![id])?;
         if deleted == 0 {
-            return Err(StorageError::NotFound { entity: "widget", id });
+            return Err(StorageError::NotFound {
+                entity: "widget",
+                id,
+            });
         }
         Ok(())
     }
@@ -161,7 +177,12 @@ mod tests {
             kind: kind.into(),
             title: kind.into(),
             config: serde_json::json!({ "months": 12 }),
-            placement: WidgetPlacement { x: 0, y, w: 6, h: 4 },
+            placement: WidgetPlacement {
+                x: 0,
+                y,
+                w: 6,
+                h: 4,
+            },
         }
     }
 
@@ -179,8 +200,24 @@ mod tests {
         let second = db.create_widget(&widget("category_breakdown", 4)).unwrap();
 
         db.save_widget_layout(&[
-            (first.id, WidgetPlacement { x: 6, y: 0, w: 6, h: 4 }),
-            (second.id, WidgetPlacement { x: 0, y: 0, w: 6, h: 4 }),
+            (
+                first.id,
+                WidgetPlacement {
+                    x: 6,
+                    y: 0,
+                    w: 6,
+                    h: 4,
+                },
+            ),
+            (
+                second.id,
+                WidgetPlacement {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 4,
+                },
+            ),
         ])
         .unwrap();
 

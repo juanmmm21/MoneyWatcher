@@ -32,7 +32,11 @@ impl Database {
 
     pub fn rule(&self, id: RuleId) -> StorageResult<Rule> {
         self.connection()
-            .query_row(&format!("{SELECT_RULE} WHERE id = ?1"), params![id.value()], map_rule)
+            .query_row(
+                &format!("{SELECT_RULE} WHERE id = ?1"),
+                params![id.value()],
+                map_rule,
+            )
             .map_err(|error| match error {
                 rusqlite::Error::QueryReturnedNoRows => StorageError::NotFound {
                     entity: "rule",
@@ -99,7 +103,11 @@ impl Database {
              AND IFNULL(account_id, -1) = IFNULL(?3, -1) LIMIT 1"
         ))?;
         let mut rows = statement.query_map(
-            params![matcher.as_str(), pattern.trim(), account_id.map(AccountId::value)],
+            params![
+                matcher.as_str(),
+                pattern.trim(),
+                account_id.map(AccountId::value)
+            ],
             map_rule,
         )?;
         match rows.next() {
@@ -214,7 +222,10 @@ mod tests {
         let found = db
             .find_equivalent_rule(RuleMatcher::Contains, "mercadona", None)
             .unwrap();
-        assert!(found.is_some(), "la comparación de patrones ignora mayúsculas");
+        assert!(
+            found.is_some(),
+            "la comparación de patrones ignora mayúsculas"
+        );
 
         let missing = db
             .find_equivalent_rule(RuleMatcher::Equals, "mercadona", None)

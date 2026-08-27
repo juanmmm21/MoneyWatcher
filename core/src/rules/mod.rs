@@ -88,8 +88,10 @@ pub fn learn_from_correction(
     transaction: &Transaction,
     category_id: CategoryId,
 ) -> StorageResult<Option<Rule>> {
-    let Some(pattern) = suggest_pattern(&transaction.description, transaction.counterparty.as_deref())
-    else {
+    let Some(pattern) = suggest_pattern(
+        &transaction.description,
+        transaction.counterparty.as_deref(),
+    ) else {
         return Ok(None);
     };
 
@@ -158,7 +160,9 @@ mod tests {
             .collect();
 
         database.insert_transactions(&batch).unwrap();
-        let stored = database.transactions(&TransactionFilter::default()).unwrap();
+        let stored = database
+            .transactions(&TransactionFilter::default())
+            .unwrap();
         (database, stored)
     }
 
@@ -181,7 +185,10 @@ mod tests {
         assert_eq!(learned.origin, RuleOrigin::Learned);
 
         let summary = apply_rules(&mut database).unwrap();
-        assert_eq!(summary.categorized, 1, "el otro Mercadona queda categorizado");
+        assert_eq!(
+            summary.categorized, 1,
+            "el otro Mercadona queda categorizado"
+        );
         assert_eq!(summary.pending, 1, "el peaje sigue esperando revisión");
         assert_eq!(database.rule(learned.id).unwrap().hits, 1);
     }
@@ -192,8 +199,12 @@ mod tests {
         let groceries = database.category_by_name("Groceries").unwrap().unwrap();
         let corrected = &transactions[0];
 
-        assert!(learn_from_correction(&database, corrected, groceries.id).unwrap().is_some());
-        assert!(learn_from_correction(&database, corrected, groceries.id).unwrap().is_none());
+        assert!(learn_from_correction(&database, corrected, groceries.id)
+            .unwrap()
+            .is_some());
+        assert!(learn_from_correction(&database, corrected, groceries.id)
+            .unwrap()
+            .is_none());
         assert_eq!(database.rules().unwrap().len(), 1);
     }
 
@@ -201,6 +212,12 @@ mod tests {
     fn without_rules_everything_stays_pending() {
         let (mut database, _) = database_with_movements();
         let summary = apply_rules(&mut database).unwrap();
-        assert_eq!(summary, CategorizationSummary { categorized: 0, pending: 3 });
+        assert_eq!(
+            summary,
+            CategorizationSummary {
+                categorized: 0,
+                pending: 3
+            }
+        );
     }
 }

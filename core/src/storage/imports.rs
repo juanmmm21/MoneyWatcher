@@ -20,7 +20,11 @@ pub struct ImportRecord {
 }
 
 impl Database {
-    pub fn create_import(&self, account_id: AccountId, source_name: &str) -> StorageResult<ImportId> {
+    pub fn create_import(
+        &self,
+        account_id: AccountId,
+        source_name: &str,
+    ) -> StorageResult<ImportId> {
         let conn = self.connection();
         conn.execute(
             "INSERT INTO imports (account_id, source_name, imported_at, imported_count, duplicate_count)

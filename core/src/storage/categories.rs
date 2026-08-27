@@ -128,7 +128,9 @@ mod tests {
     fn seeded_categories_are_available() {
         let db = Database::open_in_memory().unwrap();
         let categories = db.categories().unwrap();
-        assert!(categories.iter().any(|c| c.name == "Groceries" && c.kind == CategoryKind::Expense));
+        assert!(categories
+            .iter()
+            .any(|c| c.name == "Groceries" && c.kind == CategoryKind::Expense));
         assert!(categories.iter().all(|c| c.is_system));
     }
 
@@ -143,7 +145,10 @@ mod tests {
             })
             .unwrap();
 
-        let found = db.category_by_name("gym").unwrap().expect("categoría encontrada");
+        let found = db
+            .category_by_name("gym")
+            .unwrap()
+            .expect("categoría encontrada");
         assert_eq!(found.id, created.id);
         assert!(!found.is_system);
     }

@@ -53,8 +53,18 @@ const COUNTERPARTY: &[&str] = &[
     "merchant",
 ];
 const AMOUNT: &[&str] = &["importe", "amount", "cantidad", "valor", "betrag"];
-const DEBIT: &[&str] = &["cargo", "debe", "debit", "salida", "withdrawal", "paid out", "gastos"];
-const CREDIT: &[&str] = &["abono", "haber", "credit", "entrada", "deposit", "paid in", "ingresos"];
+const DEBIT: &[&str] = &[
+    "cargo",
+    "debe",
+    "debit",
+    "salida",
+    "withdrawal",
+    "paid out",
+    "gastos",
+];
+const CREDIT: &[&str] = &[
+    "abono", "haber", "credit", "entrada", "deposit", "paid in", "ingresos",
+];
 const BALANCE: &[&str] = &["saldo", "balance", "saldo posterior"];
 
 /// Intenta deducir el mapeo de columnas a partir de la fila de cabecera.
@@ -183,17 +193,28 @@ mod tests {
 
     #[test]
     fn maps_debit_credit_layout() {
-        let mapping = detect(&headers(&["Date", "Description", "Debit", "Credit", "Balance"]))
-            .expect("mapeo detectado");
+        let mapping = detect(&headers(&[
+            "Date",
+            "Description",
+            "Debit",
+            "Credit",
+            "Balance",
+        ]))
+        .expect("mapeo detectado");
 
-        assert_eq!(mapping.amount, AmountColumns::DebitCredit { debit: 2, credit: 3 });
+        assert_eq!(
+            mapping.amount,
+            AmountColumns::DebitCredit {
+                debit: 2,
+                credit: 3
+            }
+        );
         assert_eq!(mapping.value_on, None);
     }
 
     #[test]
     fn uses_counterparty_as_description_when_missing() {
-        let mapping =
-            detect(&headers(&["Date", "Payee", "Amount"])).expect("mapeo detectado");
+        let mapping = detect(&headers(&["Date", "Payee", "Amount"])).expect("mapeo detectado");
         assert_eq!(mapping.description, 1);
         assert_eq!(mapping.counterparty, None);
     }

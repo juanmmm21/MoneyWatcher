@@ -24,7 +24,9 @@ pub fn update_category(
     name: String,
     color: String,
 ) -> CommandResult<Category> {
-    Ok(state.database()?.update_category(category_id, &name, &color)?)
+    Ok(state
+        .database()?
+        .update_category(category_id, &name, &color)?)
 }
 
 #[tauri::command]

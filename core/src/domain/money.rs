@@ -126,10 +126,7 @@ impl Money {
 /// españoles usan `1.234,56` y los anglosajones `1,234.56`, así que el criterio
 /// es la posición: el último separador manda, y solo es decimal si le siguen
 /// como mucho dos dígitos.
-fn split_separators<'a>(
-    cleaned: &'a str,
-    raw: &str,
-) -> Result<(String, &'a str), MoneyParseError> {
+fn split_separators<'a>(cleaned: &'a str, raw: &str) -> Result<(String, &'a str), MoneyParseError> {
     let last_sep = cleaned.rfind([',', '.']);
 
     match last_sep {
@@ -145,7 +142,10 @@ fn split_separators<'a>(
 
             // Tres dígitos tras el último separador: es un separador de miles
             // (`1.234`), no un decimal. Con 1 o 2 dígitos, es decimal.
-            let head: String = cleaned[..idx].chars().filter(|c| c.is_ascii_digit()).collect();
+            let head: String = cleaned[..idx]
+                .chars()
+                .filter(|c| c.is_ascii_digit())
+                .collect();
             if tail.len() == 3 && !head.is_empty() {
                 let mut integer = head;
                 integer.push_str(tail);
@@ -217,31 +217,69 @@ mod tests {
 
     #[test]
     fn parses_spanish_format() {
-        assert_eq!(Money::parse_flexible("1.234,56").unwrap().minor_units(), 123_456);
-        assert_eq!(Money::parse_flexible("-1.234,56").unwrap().minor_units(), -123_456);
+        assert_eq!(
+            Money::parse_flexible("1.234,56").unwrap().minor_units(),
+            123_456
+        );
+        assert_eq!(
+            Money::parse_flexible("-1.234,56").unwrap().minor_units(),
+            -123_456
+        );
         assert_eq!(Money::parse_flexible("0,05").unwrap().minor_units(), 5);
     }
 
     #[test]
     fn parses_anglo_format() {
-        assert_eq!(Money::parse_flexible("1,234.56").unwrap().minor_units(), 123_456);
-        assert_eq!(Money::parse_flexible("-1234.56").unwrap().minor_units(), -123_456);
+        assert_eq!(
+            Money::parse_flexible("1,234.56").unwrap().minor_units(),
+            123_456
+        );
+        assert_eq!(
+            Money::parse_flexible("-1234.56").unwrap().minor_units(),
+            -123_456
+        );
     }
 
     #[test]
     fn parses_currency_noise_and_sign_variants() {
-        assert_eq!(Money::parse_flexible("1.234,56 €").unwrap().minor_units(), 123_456);
-        assert_eq!(Money::parse_flexible("EUR 12,00").unwrap().minor_units(), 1_200);
-        assert_eq!(Money::parse_flexible("12,00-").unwrap().minor_units(), -1_200);
-        assert_eq!(Money::parse_flexible("(45,00)").unwrap().minor_units(), -4_500);
-        assert_eq!(Money::parse_flexible("\u{2212}45,00").unwrap().minor_units(), -4_500);
+        assert_eq!(
+            Money::parse_flexible("1.234,56 €").unwrap().minor_units(),
+            123_456
+        );
+        assert_eq!(
+            Money::parse_flexible("EUR 12,00").unwrap().minor_units(),
+            1_200
+        );
+        assert_eq!(
+            Money::parse_flexible("12,00-").unwrap().minor_units(),
+            -1_200
+        );
+        assert_eq!(
+            Money::parse_flexible("(45,00)").unwrap().minor_units(),
+            -4_500
+        );
+        assert_eq!(
+            Money::parse_flexible("\u{2212}45,00")
+                .unwrap()
+                .minor_units(),
+            -4_500
+        );
     }
 
     #[test]
     fn treats_lone_thousands_separator_as_thousands() {
-        assert_eq!(Money::parse_flexible("1.234").unwrap().minor_units(), 123_400);
-        assert_eq!(Money::parse_flexible("1,234").unwrap().minor_units(), 123_400);
-        assert_eq!(Money::parse_flexible("1234").unwrap().minor_units(), 123_400);
+        assert_eq!(
+            Money::parse_flexible("1.234").unwrap().minor_units(),
+            123_400
+        );
+        assert_eq!(
+            Money::parse_flexible("1,234").unwrap().minor_units(),
+            123_400
+        );
+        assert_eq!(
+            Money::parse_flexible("1234").unwrap().minor_units(),
+            123_400
+        );
     }
 
     #[test]
@@ -252,8 +290,14 @@ mod tests {
 
     #[test]
     fn rejects_invalid_amounts() {
-        assert!(matches!(Money::parse_flexible(""), Err(MoneyParseError::Empty)));
-        assert!(matches!(Money::parse_flexible("   "), Err(MoneyParseError::Empty)));
+        assert!(matches!(
+            Money::parse_flexible(""),
+            Err(MoneyParseError::Empty)
+        ));
+        assert!(matches!(
+            Money::parse_flexible("   "),
+            Err(MoneyParseError::Empty)
+        ));
         assert!(matches!(
             Money::parse_flexible("12,3456"),
             Err(MoneyParseError::TooManyDecimals(_))
@@ -262,7 +306,10 @@ mod tests {
 
     #[test]
     fn formats_with_two_decimals() {
-        assert_eq!(Money::from_minor_units(-123_456).to_decimal_string(), "-1234.56");
+        assert_eq!(
+            Money::from_minor_units(-123_456).to_decimal_string(),
+            "-1234.56"
+        );
         assert_eq!(Money::from_minor_units(5).to_decimal_string(), "0.05");
         assert_eq!(Money::ZERO.to_decimal_string(), "0.00");
     }

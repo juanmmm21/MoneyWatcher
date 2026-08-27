@@ -155,6 +155,9 @@ mod tests {
     fn provider_round_trips_through_settings_json() {
         let provider = AiProvider::ollama_default();
         let stored = serde_json::to_string(&provider).unwrap();
-        assert_eq!(serde_json::from_str::<AiProvider>(&stored).unwrap(), provider);
+        assert_eq!(
+            serde_json::from_str::<AiProvider>(&stored).unwrap(),
+            provider
+        );
     }
 }

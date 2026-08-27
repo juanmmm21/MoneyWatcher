@@ -3,8 +3,8 @@
 //! Todos los cálculos se hacen en SQL sobre enteros y se devuelven ya listos
 //! para pintar: el frontend no vuelve a sumar dinero por su cuenta.
 
-use rusqlite::types::Value;
 use rusqlite::params_from_iter;
+use rusqlite::types::Value;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{CategoryId, Money};
@@ -77,11 +77,11 @@ impl Database {
              FROM transactions t{where_clause}"
         );
 
-        let (income, expense): (i64, i64) = self.connection().query_row(
-            &sql,
-            params_from_iter(values.iter()),
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )?;
+        let (income, expense): (i64, i64) =
+            self.connection()
+                .query_row(&sql, params_from_iter(values.iter()), |row| {
+                    Ok((row.get(0)?, row.get(1)?))
+                })?;
 
         Ok(FlowTotals {
             income: Money::from_minor_units(income),

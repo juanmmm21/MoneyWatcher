@@ -59,13 +59,55 @@ fn seeded_database() -> (Database, AccountId, AccountId) {
 
     database
         .insert_transactions(&[
-            movement(santander.id, date(2026, 1, 31), "NOMINA ENERO", Some("ACME SL"), 185_000),
-            movement(santander.id, date(2026, 1, 5), "MERCADONA", Some("MERCADONA"), -4_512),
-            movement(santander.id, date(2026, 2, 28), "NOMINA FEBRERO", Some("ACME SL"), 185_000),
-            movement(santander.id, date(2026, 2, 10), "MERCADONA", Some("MERCADONA"), -6_020),
-            movement(santander.id, date(2026, 2, 12), "IBERDROLA", Some("IBERDROLA"), -7_290),
-            movement(santander.id, date(2026, 3, 31), "NOMINA MARZO", Some("ACME SL"), 185_000),
-            movement(santander.id, date(2026, 3, 15), "MERCADONA", Some("MERCADONA"), -5_100),
+            movement(
+                santander.id,
+                date(2026, 1, 31),
+                "NOMINA ENERO",
+                Some("ACME SL"),
+                185_000,
+            ),
+            movement(
+                santander.id,
+                date(2026, 1, 5),
+                "MERCADONA",
+                Some("MERCADONA"),
+                -4_512,
+            ),
+            movement(
+                santander.id,
+                date(2026, 2, 28),
+                "NOMINA FEBRERO",
+                Some("ACME SL"),
+                185_000,
+            ),
+            movement(
+                santander.id,
+                date(2026, 2, 10),
+                "MERCADONA",
+                Some("MERCADONA"),
+                -6_020,
+            ),
+            movement(
+                santander.id,
+                date(2026, 2, 12),
+                "IBERDROLA",
+                Some("IBERDROLA"),
+                -7_290,
+            ),
+            movement(
+                santander.id,
+                date(2026, 3, 31),
+                "NOMINA MARZO",
+                Some("ACME SL"),
+                185_000,
+            ),
+            movement(
+                santander.id,
+                date(2026, 3, 15),
+                "MERCADONA",
+                Some("MERCADONA"),
+                -5_100,
+            ),
             movement(bbva.id, date(2026, 3, 1), "TRASPASO AHORRO", None, 50_000),
         ])
         .unwrap();
@@ -118,7 +160,9 @@ fn category_breakdown_groups_uncategorized_movements_instead_of_hiding_them() {
         .iter()
         .map(|transaction| transaction.id)
         .collect();
-    database.categorize_many(&grocery_ids, Some(groceries.id)).unwrap();
+    database
+        .categorize_many(&grocery_ids, Some(groceries.id))
+        .unwrap();
 
     let breakdown = database
         .category_breakdown(&TransactionFilter {
@@ -194,6 +238,12 @@ fn empty_database_returns_neutral_aggregates() {
 
     assert_eq!(totals.income, Money::ZERO);
     assert_eq!(totals.savings_rate_bps, 0);
-    assert!(database.monthly_flow(&TransactionFilter::default()).unwrap().is_empty());
-    assert!(database.bank_summaries(&TransactionFilter::default()).unwrap().is_empty());
+    assert!(database
+        .monthly_flow(&TransactionFilter::default())
+        .unwrap()
+        .is_empty());
+    assert!(database
+        .bank_summaries(&TransactionFilter::default())
+        .unwrap()
+        .is_empty());
 }

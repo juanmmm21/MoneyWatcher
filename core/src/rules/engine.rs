@@ -52,7 +52,11 @@ impl RuleEngine {
     /// Espera las reglas ya ordenadas por prioridad (como las devuelve el
     /// almacenamiento); las reordena igualmente para no depender de eso.
     pub fn new(mut rules: Vec<Rule>) -> Self {
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority).then(a.id.value().cmp(&b.id.value())));
+        rules.sort_by(|a, b| {
+            b.priority
+                .cmp(&a.priority)
+                .then(a.id.value().cmp(&b.id.value()))
+        });
         RuleEngine { rules }
     }
 
@@ -171,11 +175,10 @@ mod tests {
 
     #[test]
     fn higher_priority_rule_wins() {
-        let engine = RuleEngine::new(vec![
-            rule(1, "compra", 5, 10),
-            rule(2, "mercadona", 9, 90),
-        ]);
-        let matched = engine.categorize(input("COMPRA MERCADONA", -1_000)).unwrap();
+        let engine = RuleEngine::new(vec![rule(1, "compra", 5, 10), rule(2, "mercadona", 9, 90)]);
+        let matched = engine
+            .categorize(input("COMPRA MERCADONA", -1_000))
+            .unwrap();
         assert_eq!(matched.rule_id, RuleId(2));
     }
 
@@ -191,15 +194,23 @@ mod tests {
         let engine = RuleEngine::new(vec![only_income, small_expense]);
 
         assert_eq!(
-            engine.categorize(input("TRANSFERENCIA RECIBIDA", 20_000)).unwrap().category_id,
+            engine
+                .categorize(input("TRANSFERENCIA RECIBIDA", 20_000))
+                .unwrap()
+                .category_id,
             CategoryId(5)
         );
         assert_eq!(
-            engine.categorize(input("TRANSFERENCIA ENVIADA", -3_000)).unwrap().category_id,
+            engine
+                .categorize(input("TRANSFERENCIA ENVIADA", -3_000))
+                .unwrap()
+                .category_id,
             CategoryId(7)
         );
         assert!(
-            engine.categorize(input("TRANSFERENCIA ENVIADA", -90_000)).is_none(),
+            engine
+                .categorize(input("TRANSFERENCIA ENVIADA", -90_000))
+                .is_none(),
             "un gasto por encima del máximo no debe encajar"
         );
     }
@@ -241,9 +252,18 @@ mod tests {
         starts.matcher = RuleMatcher::StartsWith;
 
         let engine = RuleEngine::new(vec![equals, starts]);
-        assert_eq!(engine.categorize(input("Spotify", -1_099)).unwrap().category_id, CategoryId(5));
         assert_eq!(
-            engine.categorize(input("PAGO SPOTIFY AB", -1_099)).unwrap().category_id,
+            engine
+                .categorize(input("Spotify", -1_099))
+                .unwrap()
+                .category_id,
+            CategoryId(5)
+        );
+        assert_eq!(
+            engine
+                .categorize(input("PAGO SPOTIFY AB", -1_099))
+                .unwrap()
+                .category_id,
             CategoryId(7)
         );
     }
