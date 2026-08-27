@@ -3,11 +3,11 @@ node_modules/
 
 # Build (frontend)
 dist/
+*.tsbuildinfo
 build/
 .vite/
 
 # Build (Rust / Tauri)
-src-tauri/target/
 src-tauri/gen/
 
 # Logs
@@ -42,3 +42,5 @@ AGENTS.md
 CLAUDE.md
 START_HERE.md
 PROGRESS.md
+# Rust build
+/target/
