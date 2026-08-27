@@ -8,8 +8,8 @@ use super::decode::decode;
 use super::mapping::{self, AmountColumns, ColumnMapping};
 
 /// Delimitadores que se prueban al abrir un extracto, en orden de frecuencia
-/// en la banca europea.
-const DELIMITERS: [u8; 4] = [b';', b',', b'\t', b'|'];
+/// en la banca europea: punto y coma, coma, tabulador y barra vertical.
+const DELIMITERS: [u8; 4] = *b";,\t|";
 /// Cuántas filas iniciales se inspeccionan buscando la cabecera. Los extractos
 /// suelen traer antes un preámbulo con titular, IBAN y fechas del periodo.
 const MAX_HEADER_SCAN: usize = 30;
