@@ -3,6 +3,7 @@
 
 pub mod domain;
 pub mod importer;
+pub mod rules;
 pub mod storage;
 
 pub use domain::Money;
