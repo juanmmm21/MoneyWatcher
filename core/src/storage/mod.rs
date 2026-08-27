@@ -16,6 +16,7 @@ use rusqlite::Connection;
 
 pub use imports::ImportRecord;
 pub use transactions::{InsertSummary, TransactionFilter};
+pub(crate) use transactions::build_where;
 pub use widgets::{NewWidget, Widget, WidgetPlacement};
 
 /// Migraciones aplicadas en orden. Añadir una nueva es añadir una línea aquí y
