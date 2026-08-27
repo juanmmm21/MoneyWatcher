@@ -270,7 +270,7 @@ mod tests {
     #[test]
     fn arithmetic_is_exact() {
         // La suma de 0,10 diez veces da exactamente 1,00, cosa que con f64 no ocurre.
-        let total: Money = std::iter::repeat(Money::from_minor_units(10)).take(10).sum();
+        let total: Money = std::iter::repeat_n(Money::from_minor_units(10), 10).sum();
         assert_eq!(total.minor_units(), 100);
     }
 
