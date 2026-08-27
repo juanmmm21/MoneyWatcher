@@ -21,19 +21,14 @@ pub const SETTINGS_KEY: &str = "ai.provider";
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 pub const DEFAULT_OLLAMA_MODEL: &str = "llama3.2";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum AiProvider {
-    /// Sin asistente: solo reglas.
+    /// Sin asistente: solo reglas. Es el estado por defecto.
+    #[default]
     Disabled,
     /// Modelo local servido por Ollama.
     Ollama { endpoint: String, model: String },
-}
-
-impl Default for AiProvider {
-    fn default() -> Self {
-        AiProvider::Disabled
-    }
 }
 
 impl AiProvider {
