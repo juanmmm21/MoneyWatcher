@@ -2,6 +2,7 @@
 //! Tauri ni de ninguna capa de interfaz, para poder probarla de forma aislada.
 
 pub mod domain;
+pub mod importer;
 pub mod storage;
 
 pub use domain::Money;

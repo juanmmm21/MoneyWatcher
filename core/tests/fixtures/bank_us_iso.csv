@@ -1,0 +1,5 @@
+Transaction Date,Payee,Amount
+2026-03-01,ACME PAYROLL,1850.00
+2026-03-05,WHOLE FOODS #221,-45.12
+2026-03-11,,-9.99
+not-a-date,BROKEN ROW,-1.00
