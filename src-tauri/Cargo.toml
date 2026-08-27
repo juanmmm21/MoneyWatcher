@@ -1,0 +1,23 @@
+[package]
+name = "moneywatcher"
+description = "Local-first personal finance dashboard."
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# El sufijo `_lib` evita el choque de nombres entre lib y bin en Windows.
+name = "moneywatcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+moneywatcher-core = { path = "../core" }
+tauri = { version = "2", features = [] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
