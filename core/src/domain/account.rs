@@ -44,6 +44,7 @@ impl AccountKind {
 /// la organización que pide el producto es "por banco": todas las vistas
 /// agrupan ingresos y gastos por entidad.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Account {
     pub id: AccountId,
     pub name: String,
@@ -56,6 +57,7 @@ pub struct Account {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewAccount {
     pub name: String,
     pub bank: String,

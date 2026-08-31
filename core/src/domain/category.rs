@@ -35,6 +35,7 @@ impl CategoryKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Category {
     pub id: CategoryId,
     pub name: String,

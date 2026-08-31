@@ -39,6 +39,7 @@ pub enum Direction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: TransactionId,
     pub account_id: AccountId,
@@ -70,6 +71,7 @@ impl Transaction {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NewTransaction {
     pub account_id: AccountId,
     pub booked_on: NaiveDate,
