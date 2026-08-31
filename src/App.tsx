@@ -25,6 +25,10 @@ export function App() {
   const [importing, setImporting] = useState(false);
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
   const [onlyPending, setOnlyPending] = useState(false);
+  // Importar (o deshacer una importación) cambia los datos por debajo de la
+  // vista abierta, que tiene sus propias consultas. Este contador es la señal
+  // que las hace recargar sin que App conozca lo que cada una consulta.
+  const [dataVersion, setDataVersion] = useState(0);
 
   const accounts = useAsync<Account[]>(() => api.listAccounts(false), []);
   const categories = useAsync<Category[]>(() => api.listCategories(), []);
@@ -42,13 +46,16 @@ export function App() {
     setSection("transactions");
   }, []);
 
+  const invalidateData = useCallback(() => setDataVersion((version) => version + 1), []);
+
   const handleImported = useCallback(
     (result: ImportResult) => {
       setImporting(false);
       setLastImport(result);
       accounts.reload();
+      invalidateData();
     },
-    [accounts],
+    [accounts, invalidateData],
   );
 
   return (
@@ -143,6 +150,7 @@ export function App() {
             <DashboardView
               filter={filter}
               currency={currency}
+              dataVersion={dataVersion}
               onReviewPending={() => openTransactions(true)}
             />
           ) : null}
@@ -152,6 +160,7 @@ export function App() {
               accounts={accounts.data ?? []}
               categories={categories.data ?? []}
               baseFilter={filter}
+              dataVersion={dataVersion}
               initialUncategorized={onlyPending}
             />
           ) : null}
@@ -160,16 +169,19 @@ export function App() {
             <RulesView
               categories={categories.data ?? []}
               assistantEnabled={assistant.data?.enabled ?? false}
+              dataVersion={dataVersion}
             />
           ) : null}
 
           {section === "settings" ? (
             <SettingsView
               accounts={accounts.data ?? []}
+              dataVersion={dataVersion}
               onAccountsChanged={() => {
                 accounts.reload();
                 assistant.reload();
               }}
+              onDataChanged={invalidateData}
             />
           ) : null}
         </div>

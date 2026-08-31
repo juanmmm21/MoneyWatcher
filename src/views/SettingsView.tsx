@@ -9,13 +9,22 @@ import { DEFAULT_OLLAMA_ENDPOINT, DEFAULT_OLLAMA_MODEL } from "../lib/constants"
 
 interface SettingsViewProps {
   accounts: Account[];
+  /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
+  dataVersion: number;
   onAccountsChanged: () => void;
+  /** Avisa al resto de la app de que esta vista ha cambiado los datos. */
+  onDataChanged: () => void;
 }
 
 /** Cuentas, asistente y dónde viven los datos. */
-export function SettingsView({ accounts, onAccountsChanged }: SettingsViewProps) {
-  const info = useAsync<AppInfo>(() => api.appInfo(), []);
-  const imports = useAsync<ImportRecord[]>(() => api.listImports(10), []);
+export function SettingsView({
+  accounts,
+  dataVersion,
+  onAccountsChanged,
+  onDataChanged,
+}: SettingsViewProps) {
+  const info = useAsync<AppInfo>(() => api.appInfo(), [dataVersion]);
+  const imports = useAsync<ImportRecord[]>(() => api.listImports(10), [dataVersion]);
   const assistant = useAsync<AssistantStatus>(() => api.assistantStatus(), []);
 
   const [creatingAccount, setCreatingAccount] = useState(false);
@@ -59,11 +68,12 @@ export function SettingsView({ accounts, onAccountsChanged }: SettingsViewProps)
         imports.reload();
         info.reload();
         onAccountsChanged();
+        onDataChanged();
       } catch (revertError) {
         setError(errorMessage(revertError));
       }
     },
-    [imports, info, onAccountsChanged],
+    [imports, info, onAccountsChanged, onDataChanged],
   );
 
   const status = assistant.data;

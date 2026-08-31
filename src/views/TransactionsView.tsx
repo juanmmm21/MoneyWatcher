@@ -17,6 +17,8 @@ interface TransactionsViewProps {
   accounts: Account[];
   categories: Category[];
   baseFilter: TransactionFilter;
+  /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
+  dataVersion: number;
   /** Abre la vista directamente con el filtro de pendientes activado. */
   initialUncategorized?: boolean;
 }
@@ -30,6 +32,7 @@ export function TransactionsView({
   accounts,
   categories,
   baseFilter,
+  dataVersion,
   initialUncategorized = false,
 }: TransactionsViewProps) {
   const [search, setSearch] = useState("");
@@ -56,7 +59,7 @@ export function TransactionsView({
 
   const result = useAsync<TransactionPage>(
     () => api.listTransactions(filter),
-    [JSON.stringify(filter)],
+    [JSON.stringify(filter), dataVersion],
   );
 
   const accountName = useCallback(

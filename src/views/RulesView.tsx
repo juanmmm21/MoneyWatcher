@@ -7,6 +7,8 @@ import type { Category, Rule, RuleMatcher, Suggestion } from "../types/ipc";
 interface RulesViewProps {
   categories: Category[];
   assistantEnabled: boolean;
+  /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
+  dataVersion: number;
 }
 
 const MATCHERS: { value: RuleMatcher; label: string }[] = [
@@ -26,8 +28,8 @@ const ORIGIN_LABEL: Record<Rule["origin"], string> = {
  * Reglas de categorización: lo que hace que la app ordene sola. El asistente
  * de IA vive aquí también, pero solo propone; nada se aplica sin aceptar.
  */
-export function RulesView({ categories, assistantEnabled }: RulesViewProps) {
-  const rules = useAsync<Rule[]>(() => api.listRules(), []);
+export function RulesView({ categories, assistantEnabled, dataVersion }: RulesViewProps) {
+  const rules = useAsync<Rule[]>(() => api.listRules(), [dataVersion]);
   const [pattern, setPattern] = useState("");
   const [matcher, setMatcher] = useState<RuleMatcher>("contains");
   const [categoryId, setCategoryId] = useState<number | null>(categories[0]?.id ?? null);

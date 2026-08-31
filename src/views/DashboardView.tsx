@@ -13,6 +13,8 @@ const ROW_HEIGHT = 44;
 interface DashboardViewProps {
   filter: TransactionFilter;
   currency: string;
+  /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
+  dataVersion: number;
   onReviewPending: () => void;
 }
 
@@ -21,14 +23,19 @@ interface DashboardViewProps {
  * soltar el ratón, no en cada píxel arrastrado, para no escribir en disco
  * durante toda la interacción.
  */
-export function DashboardView({ filter, currency, onReviewPending }: DashboardViewProps) {
+export function DashboardView({
+  filter,
+  currency,
+  dataVersion,
+  onReviewPending,
+}: DashboardViewProps) {
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [widgetsError, setWidgetsError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
   const overview = useAsync<DashboardOverview>(
     () => api.dashboardOverview(filter),
-    [JSON.stringify(filter)],
+    [JSON.stringify(filter), dataVersion],
   );
 
   const loadWidgets = useCallback(async () => {
