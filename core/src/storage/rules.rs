@@ -186,7 +186,7 @@ mod tests {
     use crate::storage::Database;
 
     fn new_rule(db: &Database, pattern: &str, priority: i64) -> NewRule {
-        let category = db.category_by_name("Groceries").unwrap().unwrap();
+        let category = db.category_by_name("Supermercado").unwrap().unwrap();
         NewRule {
             matcher: RuleMatcher::Contains,
             pattern: pattern.into(),

@@ -149,7 +149,7 @@ fn monthly_flow_returns_one_row_per_month_in_chronological_order() {
 #[test]
 fn category_breakdown_groups_uncategorized_movements_instead_of_hiding_them() {
     let (mut database, santander, _) = seeded_database();
-    let groceries = database.category_by_name("Groceries").unwrap().unwrap();
+    let groceries = database.category_by_name("Supermercado").unwrap().unwrap();
 
     let grocery_ids: Vec<_> = database
         .transactions(&TransactionFilter {
@@ -173,7 +173,7 @@ fn category_breakdown_groups_uncategorized_movements_instead_of_hiding_them() {
         .unwrap();
 
     assert_eq!(breakdown.len(), 2);
-    assert_eq!(breakdown[0].name, "Groceries");
+    assert_eq!(breakdown[0].name, "Supermercado");
     assert_eq!(breakdown[0].total, Money::from_minor_units(15_632));
     assert_eq!(breakdown[0].transactions, 3);
     assert_eq!(breakdown[1].name, "Uncategorized");

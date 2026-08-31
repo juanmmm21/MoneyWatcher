@@ -130,7 +130,7 @@ mod tests {
         let categories = db.categories().unwrap();
         assert!(categories
             .iter()
-            .any(|c| c.name == "Groceries" && c.kind == CategoryKind::Expense));
+            .any(|c| c.name == "Supermercado" && c.kind == CategoryKind::Expense));
         assert!(categories.iter().all(|c| c.is_system));
     }
 
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn system_categories_cannot_be_deleted() {
         let db = Database::open_in_memory().unwrap();
-        let system = db.category_by_name("Groceries").unwrap().unwrap();
+        let system = db.category_by_name("Supermercado").unwrap().unwrap();
         assert!(db.delete_category(system.id).is_err());
     }
 }

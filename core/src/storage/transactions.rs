@@ -494,7 +494,7 @@ mod tests {
             .unwrap();
         assert_eq!(pending.len(), 2);
 
-        let groceries = db.category_by_name("Groceries").unwrap().unwrap();
+        let groceries = db.category_by_name("Supermercado").unwrap().unwrap();
         let ids: Vec<_> = pending.iter().map(|t| t.id).collect();
         assert_eq!(db.categorize_many(&ids, Some(groceries.id)).unwrap(), 2);
 

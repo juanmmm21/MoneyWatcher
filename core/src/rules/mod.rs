@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn learns_a_rule_from_a_manual_correction_and_applies_it_to_the_rest() {
         let (mut database, transactions) = database_with_movements();
-        let groceries = database.category_by_name("Groceries").unwrap().unwrap();
+        let groceries = database.category_by_name("Supermercado").unwrap().unwrap();
         let corrected = transactions
             .iter()
             .find(|t| t.description.contains("MERCADONA VALENCIA"))
@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn does_not_duplicate_an_existing_rule() {
         let (database, transactions) = database_with_movements();
-        let groceries = database.category_by_name("Groceries").unwrap().unwrap();
+        let groceries = database.category_by_name("Supermercado").unwrap().unwrap();
         let corrected = &transactions[0];
 
         assert!(learn_from_correction(&database, corrected, groceries.id)

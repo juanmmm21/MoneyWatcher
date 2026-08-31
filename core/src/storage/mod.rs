@@ -33,6 +33,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "seed_categories",
         include_str!("../../migrations/0002_seed_categories.sql"),
     ),
+    (
+        3,
+        "translate_seed_categories",
+        include_str!("../../migrations/0003_translate_seed_categories.sql"),
+    ),
 ];
 
 #[derive(Debug, thiserror::Error)]
