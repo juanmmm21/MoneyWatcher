@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::NaiveDate;
 use rusqlite::types::Value;
 use rusqlite::{params, params_from_iter, Row};
@@ -92,7 +94,17 @@ impl Database {
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
             )?;
 
+            // Repeticiones idénticas dentro del mismo extracto: se numeran por
+            // su orden de aparición para que las seis compras de 1,00 € del
+            // mismo día entren como seis movimientos y no como uno.
+            let mut seen: HashMap<String, u32> = HashMap::new();
+
             for transaction in transactions {
+                let base = transaction.fingerprint();
+                let occurrence = seen.entry(base).or_insert(0);
+                let fingerprint = transaction.fingerprint_for_occurrence(*occurrence);
+                *occurrence += 1;
+
                 let affected = statement.execute(params![
                     transaction.account_id.value(),
                     format_date(transaction.booked_on),
@@ -105,7 +117,7 @@ impl Database {
                     transaction.notes.as_deref(),
                     transaction.source.as_str(),
                     transaction.import_id.map(ImportId::value),
-                    transaction.fingerprint(),
+                    fingerprint,
                 ])?;
 
                 if affected == 0 {
@@ -422,20 +434,34 @@ mod tests {
     }
 
     #[test]
+    /// Extractos que se solapan: lo que ya estaba se ignora y solo entra lo
+    /// nuevo. Es el motivo por el que existe la huella.
     fn batch_insert_reports_duplicates() {
         let (mut db, account_id) = seeded_db();
-        let batch = vec![
+
+        let first = vec![
             tx(account_id, 1, "NOMINA", 180_000),
             tx(account_id, 2, "MERCADONA", -4_512),
-            tx(account_id, 2, "MERCADONA", -4_512),
         ];
-
-        let summary = db.insert_transactions(&batch).unwrap();
         assert_eq!(
-            summary,
+            db.insert_transactions(&first).unwrap(),
             InsertSummary {
                 inserted: 2,
-                duplicates: 1
+                duplicates: 0
+            }
+        );
+
+        // El segundo extracto repite los dos primeros días y añade uno nuevo.
+        let overlapping = vec![
+            tx(account_id, 1, "NOMINA", 180_000),
+            tx(account_id, 2, "MERCADONA", -4_512),
+            tx(account_id, 3, "IBERDROLA", -7_290),
+        ];
+        assert_eq!(
+            db.insert_transactions(&overlapping).unwrap(),
+            InsertSummary {
+                inserted: 1,
+                duplicates: 2
             }
         );
     }
@@ -530,6 +556,47 @@ mod tests {
             db.count_transactions(&TransactionFilter::default())
                 .unwrap(),
             3
+        );
+    }
+    /// Un extracto real trae repeticiones legítimas: seis cobros de 1,00 € del
+    /// mismo comercio el mismo día. Tratarlas como duplicados perdía
+    /// movimientos y descuadraba el saldo (visto con un extracto de verdad:
+    /// 9 movimientos y 5,75 € desaparecidos de 556).
+    #[test]
+    fn keeps_identical_transactions_repeated_within_one_statement() {
+        let (mut db, account_id) = seeded_db();
+        let batch: Vec<NewTransaction> = (0..6)
+            .map(|_| tx(account_id, 3, "HAPPY GAMES SL", -100))
+            .collect();
+
+        let summary = db.insert_transactions(&batch).unwrap();
+        assert_eq!(
+            summary.inserted, 6,
+            "las seis compras son movimientos reales"
+        );
+        assert_eq!(summary.duplicates, 0);
+        assert_eq!(db.account_balance(account_id).unwrap().minor_units(), -600);
+    }
+
+    /// Y reimportar el mismo extracto no puede duplicar nada: las repeticiones
+    /// se numeran por su posición, así que la segunda pasada genera las mismas
+    /// huellas que la primera.
+    #[test]
+    fn reimporting_the_same_statement_stays_idempotent() {
+        let (mut db, account_id) = seeded_db();
+        let batch: Vec<NewTransaction> = (0..6)
+            .map(|_| tx(account_id, 3, "HAPPY GAMES SL", -100))
+            .chain(std::iter::once(tx(account_id, 4, "NOMINA", 180_000)))
+            .collect();
+
+        db.insert_transactions(&batch).unwrap();
+        let second = db.insert_transactions(&batch).unwrap();
+
+        assert_eq!(second.inserted, 0, "la reimportación no añade nada");
+        assert_eq!(second.duplicates, 7);
+        assert_eq!(
+            db.account_balance(account_id).unwrap().minor_units(),
+            -600 + 180_000
         );
     }
 }

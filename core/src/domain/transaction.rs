@@ -88,11 +88,22 @@ pub struct NewTransaction {
 
 impl NewTransaction {
     pub fn fingerprint(&self) -> String {
-        fingerprint(
+        self.fingerprint_for_occurrence(0)
+    }
+
+    /// Huella de la n-ésima repetición de un movimiento idéntico.
+    ///
+    /// Un extracto real trae repeticiones legítimas: seis cobros de 1,00 € del
+    /// mismo comercio el mismo día son seis movimientos, no uno. Numerarlas por
+    /// su posición en el extracto las distingue sin perder la idempotencia:
+    /// reimportar el mismo fichero vuelve a producir las mismas huellas.
+    pub fn fingerprint_for_occurrence(&self, occurrence: u32) -> String {
+        fingerprint_with_occurrence(
             self.account_id,
             self.booked_on,
             self.amount,
             &self.description,
+            occurrence,
         )
     }
 }
@@ -108,11 +119,28 @@ pub fn fingerprint(
     amount: Money,
     description: &str,
 ) -> String {
+    fingerprint_with_occurrence(account_id, booked_on, amount, description, 0)
+}
+
+/// Como [`fingerprint`], distinguiendo repeticiones idénticas por su orden de
+/// aparición. La ocurrencia 0 produce la misma huella que antes de que
+/// existiera este parámetro, así que las bases ya creadas siguen valiendo.
+pub fn fingerprint_with_occurrence(
+    account_id: AccountId,
+    booked_on: NaiveDate,
+    amount: Money,
+    description: &str,
+    occurrence: u32,
+) -> String {
     let mut hasher = Sha256::new();
     hasher.update(account_id.value().to_le_bytes());
     hasher.update(booked_on.to_string().as_bytes());
     hasher.update(amount.minor_units().to_le_bytes());
     hasher.update(normalize_description(description).as_bytes());
+    if occurrence > 0 {
+        hasher.update(b"#");
+        hasher.update(occurrence.to_le_bytes());
+    }
     let digest = hasher.finalize();
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
 }
