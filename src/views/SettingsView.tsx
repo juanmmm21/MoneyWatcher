@@ -34,6 +34,9 @@ export function SettingsView({
   const assistant = useAsync<AssistantStatus>(() => api.assistantStatus(), []);
 
   const [creatingAccount, setCreatingAccount] = useState(false);
+  // Deshacer una importación borra sus movimientos y no hay vuelta atrás, así
+  // que el botón pide una segunda pulsación en lugar de disparar al primer clic.
+  const [confirmingRevert, setConfirmingRevert] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [endpoint, setEndpoint] = useState(DEFAULT_OLLAMA_ENDPOINT);
   const [model, setModel] = useState(DEFAULT_OLLAMA_MODEL);
@@ -69,6 +72,7 @@ export function SettingsView({
   const revertImport = useCallback(
     async (importId: number) => {
       setError(null);
+      setConfirmingRevert(null);
       try {
         await api.revertImport(importId);
         imports.reload();
@@ -223,7 +227,7 @@ export function SettingsView({
                 <th>Fichero</th>
                 <th className="table__amount">Importados</th>
                 <th className="table__amount">Duplicados</th>
-                <th style={{ width: 110 }} />
+                <th style={{ width: 200 }} />
               </tr>
             </thead>
             <tbody>
@@ -238,13 +242,32 @@ export function SettingsView({
                   <td className="table__amount tabular">{record.importedCount}</td>
                   <td className="table__amount tabular">{record.duplicateCount}</td>
                   <td>
-                    <button
-                      type="button"
-                      className="button button--ghost button--danger"
-                      onClick={() => void revertImport(record.id)}
-                    >
-                      Deshacer
-                    </button>
+                    {confirmingRevert === record.id ? (
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="button button--ghost button--danger"
+                          onClick={() => void revertImport(record.id)}
+                        >
+                          Borrar {record.importedCount}
+                        </button>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => setConfirmingRevert(null)}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        className="button button--ghost button--danger"
+                        onClick={() => setConfirmingRevert(record.id)}
+                      >
+                        Deshacer
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
