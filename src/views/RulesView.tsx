@@ -2,6 +2,7 @@ import { useCallback, useState } from "react";
 
 import { useAsync } from "../hooks/useAsync";
 import { api, errorMessage } from "../lib/ipc";
+import { formatMoney, isNegative } from "../lib/money";
 import type { Category, Rule, RuleMatcher, Suggestion } from "../types/ipc";
 
 interface RulesViewProps {
@@ -37,6 +38,9 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
   const [notice, setNotice] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const confidentSuggestions = (suggestions ?? []).filter((item) => !item.needsReview);
+  const doubtfulSuggestions = (suggestions ?? []).filter((item) => item.needsReview);
 
   const createRule = useCallback(async () => {
     if (pattern.trim() === "" || categoryId === null) return;
@@ -106,7 +110,14 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
   const acceptSuggestion = useCallback(async (suggestion: Suggestion) => {
     setError(null);
     try {
-      await api.correctTransactionCategory(suggestion.transactionId, suggestion.categoryId, true);
+      // De una propuesta dudosa no se aprende ninguna regla aunque el usuario
+      // la acepte: si el modelo no reconoció el comercio, generalizarla
+      // arrastraría el mismo error a todos los movimientos parecidos.
+      await api.correctTransactionCategory(
+        suggestion.transactionId,
+        suggestion.categoryId,
+        !suggestion.needsReview,
+      );
       setSuggestions((current) =>
         current?.filter((item) => item.transactionId !== suggestion.transactionId) ?? null,
       );
@@ -114,6 +125,35 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
       setError(errorMessage(acceptError));
     }
   }, []);
+
+  /// Aceptar en bloque solo lo que el modelo tenía claro; lo dudoso se queda.
+  const acceptConfident = useCallback(async () => {
+    const confident = (suggestions ?? []).filter((item) => !item.needsReview);
+    if (confident.length === 0) return;
+
+    setError(null);
+    setBusy(true);
+    const accepted: number[] = [];
+    try {
+      for (const suggestion of confident) {
+        await api.correctTransactionCategory(
+          suggestion.transactionId,
+          suggestion.categoryId,
+          true,
+        );
+        accepted.push(suggestion.transactionId);
+      }
+      setNotice(`${accepted.length} categorías aplicadas.`);
+    } catch (acceptError) {
+      setError(errorMessage(acceptError));
+    } finally {
+      // Se quitan las que sí entraron, aunque el lote se cortara a medias.
+      setSuggestions((current) =>
+        current?.filter((item) => !accepted.includes(item.transactionId)) ?? null,
+      );
+      setBusy(false);
+    }
+  }, [suggestions]);
 
   const categoryName = (id: number) =>
     categories.find((category) => category.id === id)?.name ?? "—";
@@ -260,20 +300,76 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
             </span>
           ) : null}
 
-          {(suggestions ?? []).map((suggestion) => (
-            <div key={suggestion.transactionId} className="row" style={{ gap: 12 }}>
-              <span style={{ flex: 1, minWidth: 0 }}>{suggestion.description}</span>
-              <span className="badge">{suggestion.categoryName}</span>
-              <span className="small muted tabular">{suggestion.confidence} %</span>
-              <button
-                type="button"
-                className="button"
-                onClick={() => void acceptSuggestion(suggestion)}
-              >
-                Aceptar
-              </button>
-            </div>
-          ))}
+          {confidentSuggestions.length > 0 ? (
+            <>
+              <div className="row">
+                <span className="small muted" style={{ flex: 1 }}>
+                  El modelo reconoció el comercio en estas {confidentSuggestions.length}. Aceptar
+                  una también enseña la regla correspondiente.
+                </span>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => void acceptConfident()}
+                  disabled={busy}
+                >
+                  Aceptar las {confidentSuggestions.length} seguras
+                </button>
+              </div>
+
+              {confidentSuggestions.map((suggestion) => (
+                <div key={suggestion.transactionId} className="row" style={{ gap: 12 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>{suggestion.description}</span>
+                  <span
+                    className="tabular"
+                    style={{ color: isNegative(suggestion.amount) ? "var(--expense)" : "var(--income)" }}
+                  >
+                    {formatMoney(suggestion.amount)}
+                  </span>
+                  <span className="badge">{suggestion.categoryName}</span>
+                  <span className="small muted tabular">{suggestion.confidence} %</span>
+                  <button
+                    type="button"
+                    className="button"
+                    onClick={() => void acceptSuggestion(suggestion)}
+                  >
+                    Aceptar
+                  </button>
+                </div>
+              ))}
+            </>
+          ) : null}
+
+          {doubtfulSuggestions.length > 0 ? (
+            <>
+              <div className="banner banner--warning">
+                El modelo no reconoció {doubtfulSuggestions.length === 1 ? "este comercio" : "estos comercios"}
+                {" "}y ha respondido por salir del paso. Revísalo: aceptar aquí cambia solo ese
+                movimiento y no crea ninguna regla.
+              </div>
+
+              {doubtfulSuggestions.map((suggestion) => (
+                <div key={suggestion.transactionId} className="row" style={{ gap: 12 }}>
+                  <span style={{ flex: 1, minWidth: 0 }}>{suggestion.description}</span>
+                  <span
+                    className="tabular"
+                    style={{ color: isNegative(suggestion.amount) ? "var(--expense)" : "var(--income)" }}
+                  >
+                    {formatMoney(suggestion.amount)}
+                  </span>
+                  <span className="badge">{suggestion.categoryName}</span>
+                  <span className="small muted tabular">{suggestion.confidence} %</span>
+                  <button
+                    type="button"
+                    className="button button--ghost"
+                    onClick={() => void acceptSuggestion(suggestion)}
+                  >
+                    Aceptar de todas formas
+                  </button>
+                </div>
+              ))}
+            </>
+          ) : null}
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 use moneywatcher_core::ai::{self, AiProvider};
-use moneywatcher_core::domain::{CategoryId, TransactionId};
+use moneywatcher_core::domain::{CategoryId, Money, TransactionId};
 use moneywatcher_core::storage::TransactionFilter;
 use serde::Serialize;
 use tauri::State;
@@ -32,7 +32,13 @@ pub struct SuggestionView {
     pub description: String,
     pub category_id: CategoryId,
     pub category_name: String,
+    /// Se enseña junto a la propuesta: el signo y la cantidad son lo que deja
+    /// ver de un vistazo que una sugerencia no tiene sentido.
+    pub amount: Money,
     pub confidence: u8,
+    /// El modelo no lo tiene claro: la interfaz lo aparta para que el usuario
+    /// decida en lugar de dejarlo en la misma lista que lo evidente.
+    pub needs_review: bool,
 }
 
 #[tauri::command]
@@ -126,7 +132,9 @@ pub fn suggest_categories(state: State<'_, AppState>) -> CommandResult<Vec<Sugge
             description: transaction.description.clone(),
             category_id: category.id,
             category_name: category.name.clone(),
+            amount: transaction.amount,
             confidence: suggestion.confidence,
+            needs_review: !suggestion.is_confident(),
         });
     }
 

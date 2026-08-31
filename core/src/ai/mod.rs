@@ -71,6 +71,13 @@ pub enum AiError {
     UnusableAnswer,
 }
 
+/// A partir de aquí una sugerencia se considera fiable.
+///
+/// El umbral sale de lo medido con conceptos de banca española: cuando el
+/// modelo reconoce el comercio responde por encima de 90, y cuando no lo
+/// reconoce se queda entre 30 y 45. Setenta separa los dos grupos con margen.
+pub const CONFIDENT_SUGGESTION: u8 = 70;
+
 /// Sugerencia del modelo para un movimiento concreto.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -81,6 +88,15 @@ pub struct Suggestion {
     /// Confianza declarada por el modelo, de 0 a 100. Nunca se aplica sola: la
     /// interfaz siempre pide confirmación antes de tocar los datos.
     pub confidence: u8,
+}
+
+impl Suggestion {
+    /// Si el modelo no lo tiene claro, la interfaz lo separa del resto en lugar
+    /// de mezclarlo: aceptar una propuesta dudosa a ciegas no solo clasifica mal
+    /// ese movimiento, es que además enseña una regla equivocada.
+    pub fn is_confident(&self) -> bool {
+        self.confidence >= CONFIDENT_SUGGESTION
+    }
 }
 
 /// Pide al asistente que proponga categoría para un lote de movimientos.
@@ -167,5 +183,21 @@ mod tests {
             serde_json::from_str::<AiProvider>(&stored).unwrap(),
             provider
         );
+    }
+    #[test]
+    fn separates_confident_suggestions_from_doubtful_ones() {
+        let doubtful = Suggestion {
+            index: 0,
+            category_name: "Otros gastos".into(),
+            confidence: 45,
+        };
+        let sure = Suggestion {
+            index: 1,
+            category_name: "Supermercado".into(),
+            confidence: 90,
+        };
+
+        assert!(!doubtful.is_confident());
+        assert!(sure.is_confident());
     }
 }

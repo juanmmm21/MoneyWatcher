@@ -254,7 +254,10 @@ export interface Suggestion {
   description: string;
   categoryId: number;
   categoryName: string;
+  amount: MoneyString;
   confidence: number;
+  /** El modelo no lo tiene claro: hay que revisarlo antes de aceptarlo. */
+  needsReview: boolean;
 }
 
 export interface AppInfo {
