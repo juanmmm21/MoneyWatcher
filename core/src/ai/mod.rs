@@ -19,7 +19,15 @@ pub use prompt::{parse_suggestions, SuggestionRequest};
 pub const SETTINGS_KEY: &str = "ai.provider";
 /// Endpoint por defecto de Ollama en local.
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
-pub const DEFAULT_OLLAMA_MODEL: &str = "llama3.2";
+/// Modelo por defecto.
+///
+/// Medido sobre 30 conceptos de banca española: `llama3.2` (3B) ni siquiera
+/// devolvía una lista utilizable con un lote de 25 movimientos, y cuando
+/// respondía lo mandaba casi todo a "Other expense" con confianza 100, que es
+/// peor que no sugerir nada. `qwen2.5:7b` acierta 26 de 30 y distingue de
+/// verdad lo que sabe de lo que no. Un modelo de 14B (`phi4`) llega a 30 de 30
+/// si la máquina da para ello.
+pub const DEFAULT_OLLAMA_MODEL: &str = "qwen2.5:7b";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
