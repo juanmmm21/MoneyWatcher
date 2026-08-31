@@ -20,19 +20,20 @@ const SECTIONS: { id: Section; label: string }[] = [
 ];
 
 export function App() {
+  // Importar, deshacer una importación o cambiar el asistente modifica datos
+  // por debajo de la vista abierta, que tiene sus propias consultas. Este
+  // contador es la señal que las hace recargar sin que App conozca lo que cada
+  // una consulta.
+  const [dataVersion, setDataVersion] = useState(0);
   const [section, setSection] = useState<Section>("dashboard");
   const [periodId, setPeriodId] = useState<PeriodId>("last-12-months");
   const [importing, setImporting] = useState(false);
   const [lastImport, setLastImport] = useState<ImportResult | null>(null);
   const [onlyPending, setOnlyPending] = useState(false);
-  // Importar (o deshacer una importación) cambia los datos por debajo de la
-  // vista abierta, que tiene sus propias consultas. Este contador es la señal
-  // que las hace recargar sin que App conozca lo que cada una consulta.
-  const [dataVersion, setDataVersion] = useState(0);
 
   const accounts = useAsync<Account[]>(() => api.listAccounts(false), []);
   const categories = useAsync<Category[]>(() => api.listCategories(), []);
-  const assistant = useAsync(() => api.assistantStatus(), []);
+  const assistant = useAsync(() => api.assistantStatus(), [dataVersion]);
 
   const period = useMemo(() => buildPeriod(periodId), [periodId]);
   const filter = useMemo(() => periodFilter(period, []), [period]);

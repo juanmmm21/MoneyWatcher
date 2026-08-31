@@ -40,8 +40,18 @@ export function SettingsView({
   // que el botón pide una segunda pulsación en lugar de disparar al primer clic.
   const [confirmingRevert, setConfirmingRevert] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [endpoint, setEndpoint] = useState(DEFAULT_OLLAMA_ENDPOINT);
-  const [model, setModel] = useState(DEFAULT_OLLAMA_MODEL);
+  // `null` hasta que llega la configuración guardada: si los campos arrancaran
+  // con los valores por defecto, activar el asistente pisaría el modelo que el
+  // usuario hubiera elegido antes.
+  const [endpointDraft, setEndpointDraft] = useState<string | null>(null);
+  const [modelDraft, setModelDraft] = useState<string | null>(null);
+
+  const status = assistant.data;
+  const stored = status?.provider;
+  const storedEndpoint = stored?.kind === "ollama" ? stored.endpoint : DEFAULT_OLLAMA_ENDPOINT;
+  const storedModel = stored?.kind === "ollama" ? stored.model : DEFAULT_OLLAMA_MODEL;
+  const endpoint = endpointDraft ?? storedEndpoint;
+  const model = modelDraft ?? storedModel;
 
   const toggleAssistant = useCallback(
     async (enabled: boolean) => {
@@ -50,12 +60,16 @@ export function SettingsView({
         await api.setAssistantSettings(
           enabled ? { kind: "ollama", endpoint, model } : { kind: "disabled" },
         );
+        setEndpointDraft(null);
+        setModelDraft(null);
         assistant.reload();
+        // La vista de reglas decide con esto si puede pedir sugerencias.
+        onDataChanged();
       } catch (toggleError) {
         setError(errorMessage(toggleError));
       }
     },
-    [assistant, endpoint, model],
+    [assistant, endpoint, model, onDataChanged],
   );
 
   const archiveAccount = useCallback(
@@ -89,7 +103,7 @@ export function SettingsView({
     [imports, info, onAccountsChanged, onDataChanged],
   );
 
-  const status = assistant.data;
+
 
   return (
     <div className="stack">
@@ -177,16 +191,35 @@ export function SettingsView({
               <input
                 className="input"
                 value={endpoint}
-                onChange={(event) => setEndpoint(event.target.value)}
+                onChange={(event) => setEndpointDraft(event.target.value)}
               />
             </label>
-            <label className="field" style={{ width: 200 }}>
+            <label className="field" style={{ width: 240 }}>
               Modelo
-              <input
-                className="input"
-                value={model}
-                onChange={(event) => setModel(event.target.value)}
-              />
+              {(status?.availableModels.length ?? 0) > 0 ? (
+                <select
+                  className="select"
+                  value={model}
+                  onChange={(event) => setModelDraft(event.target.value)}
+                >
+                  {/* El modelo guardado puede ya no estar descargado: se deja
+                      elegible para no perderlo en silencio al abrir Ajustes. */}
+                  {!status?.availableModels.includes(model) ? (
+                    <option value={model}>{model} (no descargado)</option>
+                  ) : null}
+                  {status?.availableModels.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  className="input"
+                  value={model}
+                  onChange={(event) => setModelDraft(event.target.value)}
+                />
+              )}
             </label>
           </div>
 
