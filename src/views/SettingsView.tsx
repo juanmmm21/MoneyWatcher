@@ -14,7 +14,6 @@ function formatSize(bytes: number): string {
 }
 
 interface SettingsViewProps {
-  accounts: Account[];
   /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
   dataVersion: number;
   onAccountsChanged: () => void;
@@ -24,11 +23,14 @@ interface SettingsViewProps {
 
 /** Cuentas, asistente y dónde viven los datos. */
 export function SettingsView({
-  accounts,
   dataVersion,
   onAccountsChanged,
   onDataChanged,
 }: SettingsViewProps) {
+  // Esta es la pantalla de administración de cuentas, así que aquí sí entran
+  // las archivadas: en cualquier otra lista estorban, pero si no aparecen aquí
+  // no hay forma de recuperarlas.
+  const allAccounts = useAsync<Account[]>(() => api.listAccounts(true), [dataVersion]);
   const info = useAsync<AppInfo>(() => api.appInfo(), [dataVersion]);
   const imports = useAsync<ImportRecord[]>(() => api.listImports(10), [dataVersion]);
   const assistant = useAsync<AssistantStatus>(() => api.assistantStatus(), []);
@@ -61,12 +63,13 @@ export function SettingsView({
       setError(null);
       try {
         await api.setAccountArchived(account.id, !account.archived);
+        allAccounts.reload();
         onAccountsChanged();
       } catch (archiveError) {
         setError(errorMessage(archiveError));
       }
     },
-    [onAccountsChanged],
+    [allAccounts, onAccountsChanged],
   );
 
   const revertImport = useCallback(
@@ -110,7 +113,7 @@ export function SettingsView({
               </tr>
             </thead>
             <tbody>
-              {accounts.map((account) => (
+              {(allAccounts.data ?? []).map((account) => (
                 <tr key={account.id}>
                   <td>{account.bank}</td>
                   <td>
@@ -133,7 +136,7 @@ export function SettingsView({
               ))}
             </tbody>
           </table>
-          {accounts.length === 0 ? (
+          {(allAccounts.data?.length ?? 0) === 0 ? (
             <div className="empty">
               <span className="empty__title">Sin cuentas todavía</span>
               <span className="small">Crea una cuenta por cada banco con el que trabajes.</span>
@@ -312,6 +315,7 @@ export function SettingsView({
           onClose={() => setCreatingAccount(false)}
           onCreated={() => {
             setCreatingAccount(false);
+            allAccounts.reload();
             onAccountsChanged();
             info.reload();
           }}

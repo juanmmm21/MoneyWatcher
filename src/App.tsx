@@ -175,7 +175,6 @@ export function App() {
 
           {section === "settings" ? (
             <SettingsView
-              accounts={accounts.data ?? []}
               dataVersion={dataVersion}
               onAccountsChanged={() => {
                 accounts.reload();
