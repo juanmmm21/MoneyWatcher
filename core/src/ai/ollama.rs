@@ -54,7 +54,7 @@ pub(super) fn suggest(
         .and_then(|value| value.as_str())
         .ok_or(AiError::UnusableAnswer)?;
 
-    prompt::parse_suggestions(answer, requests.len(), categories)
+    prompt::parse_suggestions(answer, requests, categories)
 }
 
 /// Modelos disponibles en la instancia de Ollama, para poder elegirlos en la
