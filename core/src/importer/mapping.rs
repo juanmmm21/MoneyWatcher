@@ -53,6 +53,17 @@ const COUNTERPARTY: &[&str] = &[
     "merchant",
 ];
 const AMOUNT: &[&str] = &["importe", "amount", "cantidad", "valor", "betrag"];
+/// Cabeceras que nombran entradas y salidas a la vez ("Entradas/salidas de
+/// dinero", de Revolut): son una única columna con signo, no un par de
+/// columnas de cargo y abono, y hay que reconocerlas antes de que la búsqueda
+/// de "salida" se lleve la columna como si fuera solo el debe.
+const SIGNED_AMOUNT: &[&str] = &[
+    "entradas salidas",
+    "entrada salida",
+    "money in out",
+    "money in and out",
+    "in out",
+];
 const DEBIT: &[&str] = &[
     "cargo",
     "debe",
@@ -83,9 +94,10 @@ pub fn detect(headers: &[String]) -> Option<ColumnMapping> {
         value_on
     })?;
     let balance = find(&normalized, &mut taken, BALANCE);
+    let signed_amount = find(&normalized, &mut taken, SIGNED_AMOUNT);
     let debit = find(&normalized, &mut taken, DEBIT);
     let credit = find(&normalized, &mut taken, CREDIT);
-    let single_amount = find(&normalized, &mut taken, AMOUNT);
+    let single_amount = signed_amount.or_else(|| find(&normalized, &mut taken, AMOUNT));
     let counterparty = find(&normalized, &mut taken, COUNTERPARTY);
     let description = find(&normalized, &mut taken, DESCRIPTION);
 
@@ -228,5 +240,67 @@ mod tests {
     #[test]
     fn normalizes_accents_and_punctuation() {
         assert_eq!(normalize("  FECHA_OPERACIÓN "), "fecha operacion");
+    }
+}
+
+#[cfg(test)]
+mod signed_amount_tests {
+    use super::*;
+
+    fn headers(values: &[&str]) -> Vec<String> {
+        values.iter().map(|v| v.to_string()).collect()
+    }
+
+    /// Cabecera real de un extracto de Revolut en español.
+    #[test]
+    fn reads_money_in_out_as_a_single_signed_column() {
+        let mapping = detect(&headers(&[
+            "Fecha",
+            "Descripción",
+            "Categoría",
+            "Entradas/salidas de dinero",
+            "Saldo",
+            "Impuestos retenidos",
+            "Otros impuestos",
+            "Comisiones",
+        ]))
+        .expect("la cabecera de Revolut se reconoce");
+
+        assert_eq!(mapping.booked_on, 0);
+        assert_eq!(mapping.description, 1);
+        assert_eq!(mapping.amount, AmountColumns::Single { index: 3 });
+        assert_eq!(mapping.balance, Some(4));
+    }
+
+    #[test]
+    fn english_money_in_out_is_also_a_single_column() {
+        let mapping = detect(&headers(&[
+            "Date",
+            "Description",
+            "Money in/out",
+            "Balance",
+        ]))
+        .expect("cabecera reconocida");
+        assert_eq!(mapping.amount, AmountColumns::Single { index: 2 });
+    }
+
+    /// El caso de dos columnas separadas tiene que seguir funcionando.
+    #[test]
+    fn separate_debit_and_credit_columns_still_pair_up() {
+        let mapping = detect(&headers(&[
+            "Date",
+            "Description",
+            "Debit",
+            "Credit",
+            "Balance",
+        ]))
+        .expect("cabecera reconocida");
+        assert_eq!(
+            mapping.amount,
+            AmountColumns::DebitCredit {
+                debit: 2,
+                credit: 3
+            }
+        );
     }
 }
