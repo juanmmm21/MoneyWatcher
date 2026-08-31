@@ -7,6 +7,12 @@ import { formatMoney } from "../lib/money";
 import type { Account, AppInfo, AssistantStatus, ImportRecord } from "../types/ipc";
 import { DEFAULT_OLLAMA_ENDPOINT, DEFAULT_OLLAMA_MODEL } from "../lib/constants";
 
+/** Tamaño legible: la base pasa de KB a MB en cuanto se importan unos meses. */
+function formatSize(bytes: number): string {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(1)} KB`;
+}
+
 interface SettingsViewProps {
   accounts: Account[];
   /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
@@ -258,8 +264,10 @@ export function SettingsView({
         </div>
         <div className="card__body stack">
           <p className="small muted" style={{ margin: 0 }}>
-            Todo vive en un único fichero SQLite de tu equipo. Puedes copiarlo para hacer una
-            copia de seguridad o borrarlo para empezar de cero.
+            Todo vive en un fichero SQLite de tu equipo. Para hacer una copia de seguridad,
+            cierra MoneyWatcher antes de copiarlo: con la app abierta, los últimos movimientos
+            todavía están en los ficheros <code>-wal</code> y <code>-shm</code> que lo acompañan.
+            Borrarlo (los tres) deja la app como recién instalada.
           </p>
           {info.data ? (
             <ul className="small" style={{ margin: 0, paddingLeft: 18 }}>
@@ -267,8 +275,8 @@ export function SettingsView({
                 Base de datos: <code>{info.data.databasePath}</code>
               </li>
               <li className="tabular">
-                {(info.data.databaseSizeBytes / 1024).toFixed(1)} KB ·{" "}
-                {info.data.transactions} movimientos · {info.data.accounts} cuentas
+                {formatSize(info.data.databaseSizeBytes)} · {info.data.transactions} movimientos ·{" "}
+                {info.data.accounts} cuentas
               </li>
               <li>Versión del esquema: {info.data.schemaVersion}</li>
             </ul>
