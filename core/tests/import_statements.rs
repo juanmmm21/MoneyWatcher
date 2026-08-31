@@ -119,3 +119,56 @@ fn rejects_files_that_are_not_statements() {
         Err(ImportError::HeaderNotFound)
     ));
 }
+
+/// Informe de banca electrónica (el formato que exporta Revolut en español):
+/// preámbulo largo con los datos de la cuenta, fechas con el mes escrito, una
+/// sola columna de importe llamada "Entradas/salidas de dinero" y una tabla por
+/// divisa. La fixture es sintética; el caso salió de un extracto real.
+#[test]
+fn parses_an_electronic_banking_report_with_named_months() {
+    let preview = parse_csv(&fixture("bank_report_named_months.csv")).expect("informe legible");
+
+    assert_eq!(preview.delimiter, ',');
+    // La cabecera no está en las primeras líneas, sino tras todo el preámbulo.
+    assert_eq!(preview.header_line, 21);
+    assert_eq!(
+        preview.mapping.amount,
+        AmountColumns::Single { index: 3 },
+        "«Entradas/salidas de dinero» es una columna con signo, no un par cargo/abono"
+    );
+
+    assert_eq!(preview.rows.len(), 5);
+    assert_eq!(
+        preview.rows[0].booked_on,
+        chrono::NaiveDate::from_ymd_opt(2026, 2, 12).unwrap()
+    );
+    assert_eq!(preview.rows[0].amount, Money::from_minor_units(120_000));
+    assert_eq!(
+        preview.rows[3].booked_on,
+        chrono::NaiveDate::from_ymd_opt(2026, 9, 30).unwrap(),
+        "«30 sept 2026» tiene el mes en abreviatura de cuatro letras"
+    );
+    assert_eq!(preview.rows[4].amount, Money::from_minor_units(-94_544));
+}
+
+/// La segunda tabla es de otra divisa: importarla junto a la primera metería
+/// dólares en una cuenta en euros.
+#[test]
+fn stops_at_the_second_table_and_says_so() {
+    let preview = parse_csv(&fixture("bank_report_named_months.csv")).expect("informe legible");
+
+    assert!(
+        preview
+            .rows
+            .iter()
+            .all(|row| row.description != "Compra en dólares"),
+        "la tabla en dólares no debe entrar en la importación"
+    );
+    assert!(
+        preview
+            .skipped
+            .iter()
+            .any(|skipped| skipped.reason.contains("another table")),
+        "la vista previa debe avisar de que el fichero traía más tablas"
+    );
+}

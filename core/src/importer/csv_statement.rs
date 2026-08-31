@@ -12,7 +12,11 @@ use super::mapping::{self, AmountColumns, ColumnMapping};
 const DELIMITERS: [u8; 4] = *b";,\t|";
 /// Cuántas filas iniciales se inspeccionan buscando la cabecera. Los extractos
 /// suelen traer antes un preámbulo con titular, IBAN y fechas del periodo.
-const MAX_HEADER_SCAN: usize = 30;
+/// Cuántas filas se miran buscando la cabecera. Un extracto normal la trae en
+/// las primeras líneas, pero los informes de banca electrónica (Revolut y
+/// varios agregadores) meten antes los datos de la cuenta, la entidad y los
+/// resúmenes de saldo: en un caso real la tabla empezaba en la línea 185.
+const MAX_HEADER_SCAN: usize = 500;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ImportError {
@@ -131,6 +135,8 @@ struct Candidate {
     /// Filas de datos con la línea del fichero en la que aparecen, para poder
     /// señalar en la interfaz exactamente qué línea no se pudo leer.
     records: Vec<(u64, Vec<String>)>,
+    /// Línea en la que empieza otra tabla, si el fichero trae más de una.
+    next_table: Option<u64>,
 }
 
 impl Candidate {
@@ -177,11 +183,22 @@ fn find_header(text: &str, delimiter: u8) -> Result<Option<Candidate>, ImportErr
             continue;
         };
 
-        let records: Vec<(u64, Vec<String>)> = rows[index + 1..]
-            .iter()
-            .filter(|(_, data)| data.iter().any(|cell| !cell.is_empty()))
-            .cloned()
-            .collect();
+        // Un informe puede traer una tabla por cuenta o divisa, cada una con su
+        // propia cabecera. Seguir leyendo más allá de la siguiente cabecera
+        // mezclaría movimientos de otra moneda en la cuenta elegida, así que la
+        // importación se queda en la primera tabla.
+        let mut records: Vec<(u64, Vec<String>)> = Vec::new();
+        let mut next_table: Option<u64> = None;
+        for (line, data) in &rows[index + 1..] {
+            if data.iter().all(|cell| cell.is_empty()) {
+                continue;
+            }
+            if mapping::detect(data).is_some() {
+                next_table = Some(*line);
+                break;
+            }
+            records.push((*line, data.clone()));
+        }
 
         if records.is_empty() {
             continue;
@@ -193,6 +210,7 @@ fn find_header(text: &str, delimiter: u8) -> Result<Option<Candidate>, ImportErr
             headers: row.clone(),
             mapping,
             records,
+            next_table,
         }));
     }
 
@@ -251,6 +269,15 @@ fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
             amount,
             balance_after: cell(record, candidate.mapping.balance)
                 .and_then(|raw| Money::parse_flexible(&raw).ok()),
+        });
+    }
+
+    // Que el fichero traiga más tablas no es un error, pero el usuario tiene que
+    // verlo: si no, parecerá que la importación se ha dejado movimientos.
+    if let Some(line) = candidate.next_table {
+        skipped.push(SkippedRow {
+            line,
+            reason: "another table starts here; only the first one is imported".to_string(),
         });
     }
 
