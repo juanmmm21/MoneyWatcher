@@ -7,7 +7,7 @@ mod transaction;
 
 pub use account::{Account, AccountKind, NewAccount};
 pub use category::{Category, CategoryKind, NewCategory};
-pub use ids::{AccountId, CategoryId, ImportId, RuleId, TransactionId};
+pub use ids::{AccountId, CategoryId, ImportId, RuleId, TransactionId, TransferLinkId};
 pub use money::{Money, MoneyParseError, SCALE};
 pub use rule::{NewRule, Rule, RuleMatcher, RuleOrigin};
 pub use transaction::{

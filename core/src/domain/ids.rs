@@ -35,3 +35,4 @@ typed_id!(CategoryId);
 typed_id!(TransactionId);
 typed_id!(RuleId);
 typed_id!(ImportId);
+typed_id!(TransferLinkId);

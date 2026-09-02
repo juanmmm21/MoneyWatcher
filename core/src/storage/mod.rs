@@ -7,6 +7,7 @@ mod imports;
 mod rules;
 mod settings;
 mod transactions;
+mod transfers;
 mod widgets;
 
 use std::path::Path;
@@ -17,6 +18,7 @@ use rusqlite::Connection;
 pub use imports::ImportRecord;
 pub(crate) use transactions::build_where;
 pub use transactions::{InsertSummary, TransactionFilter};
+pub use transfers::{TransferCandidate, TransferLink};
 pub use widgets::{NewWidget, Widget, WidgetPlacement};
 
 /// Migraciones aplicadas en orden. Añadir una nueva es añadir una línea aquí y
@@ -47,6 +49,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         5,
         "drop_opening_balance",
         include_str!("../../migrations/0005_drop_opening_balance.sql"),
+    ),
+    (
+        6,
+        "transfer_links",
+        include_str!("../../migrations/0006_transfer_links.sql"),
     ),
 ];
 
