@@ -26,6 +26,9 @@ fn main() {
             println!("cabeceras     : {:?}", preview.headers);
             println!("mapeo         : {:?}", preview.mapping);
             println!("filas leídas  : {}", preview.rows.len());
+            if preview.fee_applied {
+                println!("comisiones    : descontadas del importe (lo confirma el saldo)");
+            }
             println!("filas saltadas: {}", preview.skipped.len());
             println!(
                 "suma importes : {}",

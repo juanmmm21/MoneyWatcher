@@ -199,21 +199,51 @@ fn balance_check_is_absent_without_a_balance_column() {
     assert!(preview.balance_check().is_none());
 }
 
-/// Extracto en orden inverso y con una columna de comisión aparte: el saldo se
-/// mueve más de lo que dice la columna de importe, y la comprobación lo señala.
+/// Extracto en orden inverso con la comisión en su propia columna: sale de la
+/// cuenta además del importe, así que hay que descontarla o el saldo no cuadra.
 #[test]
-fn balance_check_reports_the_rows_that_do_not_add_up() {
+fn fees_charged_apart_are_subtracted_from_the_amount() {
     let preview = parse_csv(&fixture("bank_newest_first_fee.csv")).expect("extracto legible");
-    let check = preview.balance_check().expect("el extracto trae saldos");
 
+    assert!(preview.fee_applied);
+    let check = preview.balance_check().expect("el extracto trae saldos");
+    assert!(check.is_consistent(), "{:?}", check.mismatches);
     assert!(
         !check.oldest_first,
         "las filas van de la más reciente a la más antigua"
     );
-    assert_eq!(check.mismatches.len(), 2);
-    assert_eq!(
-        check.mismatches[0].expected,
-        Money::from_minor_units(-50_000)
-    );
-    assert_eq!(check.mismatches[0].found, Money::from_minor_units(-49_802));
+
+    let transfer = &preview.rows[1];
+    assert_eq!(transfer.amount, Money::from_minor_units(-50_000));
+    assert_eq!(transfer.fee, Some(Money::from_minor_units(198)));
+
+    // Una fila cuyo único movimiento es la comisión también sale de la cuenta.
+    assert_eq!(preview.rows[3].amount, Money::from_minor_units(-1_599));
+}
+
+/// El mismo nombre de columna, el uso contrario: aquí el importe ya trae la
+/// comisión dentro y restarla otra vez la cobraría dos veces. Lo decide el
+/// saldo del extracto, no el nombre del banco.
+#[test]
+fn fees_already_inside_the_amount_are_left_alone() {
+    let preview = parse_csv(&fixture("bank_fee_already_included.csv")).expect("extracto legible");
+
+    assert!(!preview.fee_applied);
+    assert_eq!(preview.rows[1].amount, Money::from_minor_units(-10_000));
+    assert_eq!(preview.rows[1].fee, Some(Money::from_minor_units(200)));
+    assert!(preview
+        .balance_check()
+        .expect("trae saldos")
+        .is_consistent());
+}
+
+/// Sin columna de saldo no hay con qué comprobarlo, y tocar el importe a ciegas
+/// es peor que dejarlo como viene.
+#[test]
+fn fees_are_not_touched_without_a_balance_to_check_against() {
+    let preview = parse_csv(&fixture("bank_fee_without_balance.csv")).expect("extracto legible");
+
+    assert!(!preview.fee_applied);
+    assert_eq!(preview.rows[1].amount, Money::from_minor_units(-10_000));
+    assert_eq!(preview.rows[1].fee, Some(Money::from_minor_units(200)));
 }

@@ -192,6 +192,8 @@ export interface ColumnMapping {
   description: number;
   counterparty: number | null;
   amount: AmountColumns;
+  /** Columna con la comisión que el banco cobra aparte del importe. */
+  fee: number | null;
   balance: number | null;
 }
 
@@ -202,6 +204,8 @@ export interface ParsedRow {
   description: string;
   counterparty: string | null;
   amount: MoneyString;
+  /** Comisión de la fila, ya descontada de `amount` si `feeApplied`. */
+  fee: MoneyString | null;
   balanceAfter: MoneyString | null;
 }
 
@@ -217,6 +221,9 @@ export interface StatementPreview {
   mapping: ColumnMapping;
   rows: ParsedRow[];
   skipped: SkippedRow[];
+  /** Las comisiones se han descontado de los importes porque el saldo del
+   * extracto solo cuadra así. */
+  feeApplied: boolean;
 }
 
 export interface ImportRecord {

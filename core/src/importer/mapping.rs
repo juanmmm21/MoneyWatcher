@@ -18,6 +18,10 @@ pub struct ColumnMapping {
     pub description: usize,
     pub counterparty: Option<usize>,
     pub amount: AmountColumns,
+    /// Columna con la comisión que el banco cobra aparte del importe (Revolut
+    /// la trae así). Mueve el saldo igual que el importe, pero no está sumada
+    /// dentro de él.
+    pub fee: Option<usize>,
     pub balance: Option<usize>,
 }
 
@@ -77,6 +81,9 @@ const CREDIT: &[&str] = &[
     "abono", "haber", "credit", "entrada", "deposit", "paid in", "ingresos",
 ];
 const BALANCE: &[&str] = &["saldo", "balance", "saldo posterior"];
+/// Comisiones cobradas aparte del importe. Se buscan después de la columna de
+/// importe para no quedarse con ella en un extracto que solo liste comisiones.
+const FEE: &[&str] = &["comision", "comisiones", "fee", "fees"];
 
 /// Intenta deducir el mapeo de columnas a partir de la fila de cabecera.
 ///
@@ -98,6 +105,7 @@ pub fn detect(headers: &[String]) -> Option<ColumnMapping> {
     let debit = find(&normalized, &mut taken, DEBIT);
     let credit = find(&normalized, &mut taken, CREDIT);
     let single_amount = signed_amount.or_else(|| find(&normalized, &mut taken, AMOUNT));
+    let fee = find(&normalized, &mut taken, FEE);
     let counterparty = find(&normalized, &mut taken, COUNTERPARTY);
     let description = find(&normalized, &mut taken, DESCRIPTION);
 
@@ -123,6 +131,7 @@ pub fn detect(headers: &[String]) -> Option<ColumnMapping> {
         description,
         counterparty,
         amount,
+        fee,
         balance,
     })
 }
@@ -201,6 +210,36 @@ mod tests {
         assert_eq!(mapping.description, 2);
         assert_eq!(mapping.amount, AmountColumns::Single { index: 3 });
         assert_eq!(mapping.balance, Some(4));
+    }
+
+    /// Cabecera del CSV de movimientos de Revolut: la comisión va en su propia
+    /// columna y sale de la cuenta igual que el importe.
+    #[test]
+    fn maps_the_fee_column_apart_from_the_amount() {
+        let mapping = detect(&headers(&[
+            "Tipo",
+            "Producto",
+            "Fecha de inicio",
+            "Fecha de finalización",
+            "Descripción",
+            "Importe",
+            "Comisión",
+            "Divisa",
+            "State",
+            "Saldo",
+        ]))
+        .expect("mapeo detectado");
+
+        assert_eq!(mapping.amount, AmountColumns::Single { index: 5 });
+        assert_eq!(mapping.fee, Some(6));
+        assert_eq!(mapping.balance, Some(9));
+    }
+
+    #[test]
+    fn statements_without_fees_leave_the_column_unset() {
+        let mapping =
+            detect(&headers(&["Fecha", "Concepto", "Importe", "Saldo"])).expect("mapeo detectado");
+        assert_eq!(mapping.fee, None);
     }
 
     #[test]

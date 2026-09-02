@@ -115,6 +115,14 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
                 <span className="badge">Columnas: {preview.headers.join(" · ")}</span>
               </div>
 
+              {preview.feeApplied ? (
+                <div className="small muted">
+                  Este extracto cobra comisiones aparte del importe: van descontadas en los
+                  importes de abajo, que es la única lectura con la que cuadra el saldo del
+                  propio extracto.
+                </div>
+              ) : null}
+
               <table className="table">
                 <thead>
                   <tr>

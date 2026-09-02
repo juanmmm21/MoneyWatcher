@@ -41,6 +41,10 @@ pub struct ParsedRow {
     pub description: String,
     pub counterparty: Option<String>,
     pub amount: Money,
+    /// Comisión que el extracto cobra aparte del importe, si trae una columna
+    /// propia para ella. Se guarda para poder enseñarla en la vista previa
+    /// aunque ya esté descontada de `amount`.
+    pub fee: Option<Money>,
     pub balance_after: Option<Money>,
 }
 
@@ -86,6 +90,9 @@ pub struct StatementPreview {
     pub mapping: ColumnMapping,
     pub rows: Vec<ParsedRow>,
     pub skipped: Vec<SkippedRow>,
+    /// La comisión de cada fila se ha restado de su importe porque, sin
+    /// hacerlo, el saldo que declara el propio extracto no cuadraba.
+    pub fee_applied: bool,
 }
 
 /// Una fila en la que el salto de saldo del extracto no coincide con el importe
@@ -132,65 +139,72 @@ impl StatementPreview {
     /// del movimiento más antiguo al más reciente como al revés, así que se
     /// prueban los dos sentidos y gana el que cuadra más veces.
     pub fn balance_check(&self) -> Option<BalanceCheck> {
-        let ascending = self.check_in_order(true);
-        let descending = self.check_in_order(false);
+        balance_check_of(&self.rows)
+    }
+}
 
-        match (ascending, descending) {
-            (Some(ascending), Some(descending)) => {
-                if descending.matched > ascending.matched {
-                    Some(descending)
-                } else {
-                    Some(ascending)
-                }
+/// Misma comprobación sobre una lista de filas suelta: el importador la usa
+/// para decidir entre dos lecturas posibles del mismo fichero antes de tener
+/// una vista previa montada.
+fn balance_check_of(rows: &[ParsedRow]) -> Option<BalanceCheck> {
+    let ascending = check_in_order(rows, true);
+    let descending = check_in_order(rows, false);
+
+    match (ascending, descending) {
+        (Some(ascending), Some(descending)) => {
+            if descending.matched > ascending.matched {
+                Some(descending)
+            } else {
+                Some(ascending)
             }
-            (ascending, descending) => ascending.or(descending),
+        }
+        (ascending, descending) => ascending.or(descending),
+    }
+}
+
+fn check_in_order(rows: &[ParsedRow], oldest_first: bool) -> Option<BalanceCheck> {
+    let mut matched = 0;
+    let mut mismatches = Vec::new();
+    let mut pairs = 0;
+
+    for window in rows.windows(2) {
+        let (previous, current) = (&window[0], &window[1]);
+        let (Some(previous_balance), Some(current_balance)) =
+            (previous.balance_after, current.balance_after)
+        else {
+            continue;
+        };
+
+        pairs += 1;
+        // Leído de más antiguo a más reciente, el saldo de una fila es el de
+        // la anterior más su propio importe; al revés, el movimiento que
+        // explica el salto es el de la fila anterior.
+        let (expected, row) = if oldest_first {
+            (current_balance - previous_balance, current)
+        } else {
+            (previous_balance - current_balance, previous)
+        };
+
+        if expected == row.amount {
+            matched += 1;
+        } else {
+            mismatches.push(BalanceMismatch {
+                line: row.line,
+                expected,
+                found: row.amount,
+            });
         }
     }
 
-    fn check_in_order(&self, oldest_first: bool) -> Option<BalanceCheck> {
-        let mut matched = 0;
-        let mut mismatches = Vec::new();
-        let mut pairs = 0;
-
-        for window in self.rows.windows(2) {
-            let (previous, current) = (&window[0], &window[1]);
-            let (Some(previous_balance), Some(current_balance)) =
-                (previous.balance_after, current.balance_after)
-            else {
-                continue;
-            };
-
-            pairs += 1;
-            // Leído de más antiguo a más reciente, el saldo de una fila es el de
-            // la anterior más su propio importe; al revés, el movimiento que
-            // explica el salto es el de la fila anterior.
-            let (expected, row) = if oldest_first {
-                (current_balance - previous_balance, current)
-            } else {
-                (previous_balance - current_balance, previous)
-            };
-
-            if expected == row.amount {
-                matched += 1;
-            } else {
-                mismatches.push(BalanceMismatch {
-                    line: row.line,
-                    expected,
-                    found: row.amount,
-                });
-            }
-        }
-
-        if pairs == 0 {
-            return None;
-        }
-
-        Some(BalanceCheck {
-            matched,
-            mismatches,
-            oldest_first,
-        })
+    if pairs == 0 {
+        return None;
     }
+
+    Some(BalanceCheck {
+        matched,
+        mismatches,
+        oldest_first,
+    })
 }
 
 /// Lee un extracto CSV detectando por su cuenta delimitador, codificación,
@@ -366,6 +380,10 @@ fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
             description,
             counterparty: cell(record, candidate.mapping.counterparty).filter(|t| !t.is_empty()),
             amount,
+            fee: cell(record, candidate.mapping.fee)
+                .and_then(|raw| Money::parse_flexible(&raw).ok())
+                .map(Money::abs)
+                .filter(|fee| !fee.is_zero()),
             balance_after: cell(record, candidate.mapping.balance)
                 .and_then(|raw| Money::parse_flexible(&raw).ok()),
         });
@@ -380,6 +398,8 @@ fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
         });
     }
 
+    let fee_applied = apply_fees_if_the_balance_says_so(&mut rows);
+
     StatementPreview {
         delimiter: candidate.delimiter as char,
         header_line: candidate.header_line,
@@ -387,7 +407,50 @@ fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
         mapping: candidate.mapping,
         rows,
         skipped,
+        fee_applied,
     }
+}
+
+/// Descuenta la comisión de cada importe, pero solo si el saldo que declara el
+/// extracto confirma que hay que hacerlo.
+///
+/// No todos los bancos usan esa columna igual: unos ya traen la comisión dentro
+/// del importe (restarla la cobraría dos veces) y otros la cobran aparte (no
+/// restarla descuadra el saldo). En vez de adivinarlo por el nombre del banco
+/// se prueban las dos lecturas contra la columna de saldo y gana la que cuadra.
+/// Sin columna de saldo no hay forma de comprobarlo, así que se deja el importe
+/// tal cual: es la única opción que no inventa dinero.
+fn apply_fees_if_the_balance_says_so(rows: &mut [ParsedRow]) -> bool {
+    if rows.iter().all(|row| row.fee.is_none()) {
+        return false;
+    }
+
+    let Some(as_is) = balance_check_of(rows) else {
+        return false;
+    };
+    if as_is.is_consistent() {
+        return false;
+    }
+
+    let with_fees: Vec<ParsedRow> = rows
+        .iter()
+        .map(|row| ParsedRow {
+            amount: row.amount - row.fee.unwrap_or(Money::ZERO),
+            ..row.clone()
+        })
+        .collect();
+
+    let Some(net) = balance_check_of(&with_fees) else {
+        return false;
+    };
+    if net.matched <= as_is.matched {
+        return false;
+    }
+
+    for (row, net_row) in rows.iter_mut().zip(with_fees) {
+        row.amount = net_row.amount;
+    }
+    true
 }
 
 fn read_amount(record: &[String], columns: &AmountColumns) -> Result<Money, String> {
