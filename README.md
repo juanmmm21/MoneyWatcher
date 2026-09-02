@@ -202,7 +202,9 @@ the cheapest way to know a new bank's format was read correctly, down to the cen
 ### The optional assistant
 
 Settings → *Asistente de categorización*. Point it at a local [Ollama](https://ollama.com) instance
-(`http://127.0.0.1:11434` by default) and pick a model you have pulled. The app sends only the
+(`http://127.0.0.1:11434` by default) and pick a model you have pulled. Model size matters more
+than anything else here: below 4B the answers are not usable, and the example below measures any
+model you have against a fixed set of Spanish bank descriptions before you trust it. The app sends only the
 description, counterparty and amount of the movements no rule could classify — never account names,
 balances or identifiers — and shows the model's proposals for you to accept one by one. If you
 point it at a non-local endpoint, the UI warns you explicitly that data would leave your machine.
@@ -255,6 +257,18 @@ npm test
 The Rust test suite covers the money type, the SQLite repositories and migrations, the statement
 importer (against synthetic statements in `core/tests/fixtures/`), the rule engine and every
 dashboard aggregation.
+
+### Measuring a model before trusting it
+
+```bash
+ollama serve
+cargo run -p moneywatcher-core --example benchmark_assistant -- gemma3 qwen2.5:7b phi4
+```
+
+Runs 35 synthetic Spanish bank descriptions through each model in batches of 25 — the same batch
+size the app uses — and reports how many it gets right, how many it declines to answer, how many of
+its *confident* answers are right, and how long it took. That last-but-one column is the one that
+matters: a wrong answer the model is sure about is the one a user accepts without looking.
 
 ### Running against a demo database
 
