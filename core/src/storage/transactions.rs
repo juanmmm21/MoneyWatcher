@@ -25,6 +25,10 @@ pub struct TransactionFilter {
     pub search: Option<String>,
     /// Solo movimientos aún sin categoría, para la bandeja de revisión.
     pub uncategorized_only: bool,
+    /// Restringe la consulta a las cuentas denominadas en esta divisa (ISO 4217).
+    /// Sin él, cualquier agregación sumaría importes de divisas distintas como
+    /// si fueran la misma unidad, que es dar un número falso.
+    pub currency: Option<String>,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
@@ -298,6 +302,14 @@ pub(crate) fn build_where(filter: &TransactionFilter) -> (String, Vec<Value>) {
         clauses.push("t.category_id IS NULL".to_string());
     }
 
+    if let Some(currency) = normalized_currency(filter.currency.as_deref()) {
+        values.push(Value::from(currency));
+        clauses.push(format!(
+            "t.account_id IN (SELECT id FROM accounts WHERE currency = ?{})",
+            values.len()
+        ));
+    }
+
     if let Some(search) = filter
         .search
         .as_ref()
@@ -316,6 +328,13 @@ pub(crate) fn build_where(filter: &TransactionFilter) -> (String, Vec<Value>) {
     } else {
         (format!(" WHERE {}", clauses.join(" AND ")), values)
     }
+}
+
+/// Códigos ISO 4217 en mayúsculas y sin espacios, que es como se guardan en
+/// `accounts`. Una cadena vacía no filtra nada: es «todas las divisas».
+pub(crate) fn normalized_currency(raw: Option<&str>) -> Option<String> {
+    raw.map(|code| code.trim().to_uppercase())
+        .filter(|code| !code.is_empty())
 }
 
 fn placeholders(values: &mut Vec<Value>, ids: impl Iterator<Item = i64>) -> String {
@@ -402,6 +421,59 @@ mod tests {
             source: TransactionSource::Imported,
             import_id: None,
         }
+    }
+
+    /// Cuenta adicional en otra divisa, para los tests que comprueban que las
+    /// consultas no mezclan importes de divisas distintas.
+    fn account_in(db: &Database, name: &str, currency: &str) -> AccountId {
+        db.create_account(&NewAccount {
+            name: name.into(),
+            bank: "Revolut".into(),
+            kind: AccountKind::Checking,
+            currency: currency.into(),
+            opening_balance: Money::ZERO,
+        })
+        .unwrap()
+        .id
+    }
+
+    #[test]
+    fn filters_transactions_by_account_currency() {
+        let (mut db, euros) = seeded_db();
+        let pounds = account_in(&db, "Libras", "GBP");
+        db.insert_transactions(&[
+            tx(euros, 3, "MERCADONA", -4_512),
+            tx(pounds, 4, "TESCO", -1_000),
+        ])
+        .unwrap();
+
+        let only_pounds = TransactionFilter {
+            currency: Some("gbp".into()),
+            ..Default::default()
+        };
+        let found = db.transactions(&only_pounds).unwrap();
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].description, "TESCO");
+
+        // Sin divisa en el filtro se ven todas: el filtro es opcional.
+        assert_eq!(
+            db.count_transactions(&TransactionFilter::default())
+                .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn an_empty_currency_does_not_filter() {
+        let (mut db, euros) = seeded_db();
+        db.insert_transactions(&[tx(euros, 3, "MERCADONA", -4_512)])
+            .unwrap();
+
+        let blank = TransactionFilter {
+            currency: Some("   ".into()),
+            ..Default::default()
+        };
+        assert_eq!(db.count_transactions(&blank).unwrap(), 1);
     }
 
     #[test]

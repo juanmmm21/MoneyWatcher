@@ -1,8 +1,22 @@
 use rusqlite::{params, Row};
+use serde::{Deserialize, Serialize};
 
 use crate::domain::{Account, AccountId, AccountKind, Money, NewAccount};
 
 use super::{Database, StorageError, StorageResult};
+
+/// Una divisa presente en las cuentas del usuario y lo que hay dentro de ella.
+///
+/// El dashboard solo puede agregar dentro de una misma divisa, así que necesita
+/// saber cuáles existen y cuál pesa más para enseñarla por defecto.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CurrencyUsage {
+    /// Código ISO 4217 en mayúsculas.
+    pub currency: String,
+    pub accounts: i64,
+    pub transactions: i64,
+}
 
 impl Database {
     pub fn create_account(&self, account: &NewAccount) -> StorageResult<Account> {
@@ -108,6 +122,35 @@ impl Database {
         )?;
         Ok(account.opening_balance + Money::from_minor_units(movements))
     }
+
+    /// Divisas en uso, de la que más movimientos tiene a la que menos.
+    ///
+    /// Cuenta también las cuentas archivadas: sus movimientos siguen entrando
+    /// en las agregaciones, así que ocultar su divisa dejaría dinero fuera de
+    /// toda vista sin que el usuario pudiera llegar a él.
+    pub fn currencies_in_use(&self) -> StorageResult<Vec<CurrencyUsage>> {
+        let mut statement = self.connection().prepare(
+            "SELECT a.currency, COUNT(DISTINCT a.id), COUNT(t.id)
+             FROM accounts a
+             LEFT JOIN transactions t ON t.account_id = a.id
+             GROUP BY a.currency
+             ORDER BY 3 DESC, 2 DESC, 1 ASC",
+        )?;
+
+        let rows = statement.query_map([], |row| {
+            Ok(CurrencyUsage {
+                currency: row.get(0)?,
+                accounts: row.get(1)?,
+                transactions: row.get(2)?,
+            })
+        })?;
+
+        let mut usages = Vec::new();
+        for row in rows {
+            usages.push(row?);
+        }
+        Ok(usages)
+    }
 }
 
 fn map_account(row: &Row<'_>) -> rusqlite::Result<StorageResult<Account>> {
@@ -178,6 +221,63 @@ mod tests {
 
         assert!(db.accounts(false).unwrap().is_empty());
         assert_eq!(db.accounts(true).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn lists_currencies_by_weight() {
+        let db = Database::open_in_memory().unwrap();
+        db.create_account(&sample("Santander", "Main")).unwrap();
+        let pounds = db
+            .create_account(&NewAccount {
+                currency: "GBP".into(),
+                ..sample("Revolut", "Libras")
+            })
+            .unwrap();
+        db.create_account(&NewAccount {
+            currency: "GBP".into(),
+            ..sample("Revolut", "Libras 2")
+        })
+        .unwrap();
+
+        // La divisa con movimientos manda sobre la que solo tiene cuentas.
+        db.insert_transaction(&crate::domain::NewTransaction {
+            account_id: pounds.id,
+            booked_on: chrono::NaiveDate::from_ymd_opt(2026, 3, 4).unwrap(),
+            value_on: None,
+            description: "TESCO".into(),
+            counterparty: None,
+            amount: Money::from_minor_units(-1_000),
+            balance_after: None,
+            category_id: None,
+            notes: None,
+            source: crate::domain::TransactionSource::Imported,
+            import_id: None,
+        })
+        .unwrap();
+
+        let currencies = db.currencies_in_use().unwrap();
+        assert_eq!(currencies.len(), 2);
+        assert_eq!(currencies[0].currency, "GBP");
+        assert_eq!(currencies[0].accounts, 2);
+        assert_eq!(currencies[0].transactions, 1);
+        assert_eq!(currencies[1].currency, "EUR");
+        assert_eq!(currencies[1].transactions, 0);
+    }
+
+    #[test]
+    fn archived_accounts_keep_their_currency_listed() {
+        let db = Database::open_in_memory().unwrap();
+        let account = db
+            .create_account(&NewAccount {
+                currency: "JPY".into(),
+                ..sample("Revolut", "Yenes")
+            })
+            .unwrap();
+        db.set_account_archived(account.id, true).unwrap();
+
+        let currencies = db.currencies_in_use().unwrap();
+        assert_eq!(currencies.len(), 1);
+        assert_eq!(currencies[0].currency, "JPY");
     }
 
     #[test]

@@ -14,6 +14,7 @@ use std::path::Path;
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
+pub use accounts::CurrencyUsage;
 pub use imports::ImportRecord;
 pub(crate) use transactions::build_where;
 pub use transactions::{InsertSummary, TransactionFilter};

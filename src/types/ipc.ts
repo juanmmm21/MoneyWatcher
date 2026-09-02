@@ -68,8 +68,20 @@ export interface TransactionFilter {
   direction?: Direction | null;
   search?: string | null;
   uncategorizedOnly?: boolean;
+  /**
+   * Restringe la consulta a las cuentas de esta divisa (ISO 4217). Es lo que
+   * impide que una agregación sume importes de divisas distintas.
+   */
+  currency?: string | null;
   limit?: number | null;
   offset?: number | null;
+}
+
+/** Divisa presente en las cuentas del usuario, con lo que hay dentro. */
+export interface CurrencyUsage {
+  currency: string;
+  accounts: number;
+  transactions: number;
 }
 
 export interface TransactionPage {
