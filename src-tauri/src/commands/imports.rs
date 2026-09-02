@@ -4,6 +4,7 @@ use moneywatcher_core::domain::AccountId;
 use moneywatcher_core::importer::{parse_statement, StatementPreview};
 use moneywatcher_core::rules::{apply_rules, CategorizationSummary};
 use moneywatcher_core::storage::ImportRecord;
+use moneywatcher_core::transfers::{self, TransferDetection};
 use serde::Serialize;
 use tauri::State;
 
@@ -22,6 +23,9 @@ pub struct ImportResult {
     pub duplicates: usize,
     pub skipped: usize,
     pub categorization: CategorizationSummary,
+    /// Traspasos encontrados entre lo recién importado y lo que ya había.
+    /// `None` si el usuario tiene la detección apagada.
+    pub transfers: Option<TransferDetection>,
 }
 
 /// Lee el extracto y devuelve lo que ha entendido, sin tocar la base de datos.
@@ -64,12 +68,22 @@ pub fn import_statement(
     let import = database.finish_import(import_id, summary.inserted, summary.duplicates)?;
     let categorization = apply_rules(&mut database)?;
 
+    // Un extracto nuevo suele traer la otra cara de traspasos que ya estaban
+    // importados, así que se busca aquí en lugar de esperar a que el usuario
+    // entre en Ajustes.
+    let transfers = if transfers::detection_enabled(&database)? {
+        Some(transfers::detect_transfers(&mut database)?)
+    } else {
+        None
+    };
+
     Ok(ImportResult {
         import,
         imported: summary.inserted,
         duplicates: summary.duplicates,
         skipped: preview.skipped.len(),
         categorization,
+        transfers,
     })
 }
 

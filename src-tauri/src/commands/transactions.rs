@@ -13,6 +13,10 @@ use crate::state::AppState;
 pub struct TransactionPage {
     pub transactions: Vec<Transaction>,
     pub total: i64,
+    /// Cuáles de estos movimientos son una de las dos caras de un traspaso
+    /// reconocido. La tabla los etiqueta; no los esconde, porque en el extracto
+    /// del banco están y no verlos aquí despistaría más que ayudar.
+    pub transfer_ids: Vec<TransactionId>,
 }
 
 #[tauri::command]
@@ -21,9 +25,21 @@ pub fn list_transactions(
     filter: TransactionFilter,
 ) -> CommandResult<TransactionPage> {
     let database = state.database()?;
+    let transactions = database.transactions(&filter)?;
+
+    let ids: Vec<TransactionId> = transactions.iter().map(|row| row.id).collect();
+    let mut transfer_ids: Vec<TransactionId> = database
+        .transfer_transaction_ids(&ids)?
+        .into_iter()
+        .collect();
+    // El conjunto no tiene orden estable y esto viaja por la IPC: ordenarlo
+    // mantiene la respuesta igual entre llamadas idénticas.
+    transfer_ids.sort_unstable();
+
     Ok(TransactionPage {
-        transactions: database.transactions(&filter)?,
+        transactions,
         total: database.count_transactions(&filter)?,
+        transfer_ids,
     })
 }
 
