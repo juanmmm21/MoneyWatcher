@@ -76,30 +76,33 @@ export const WIDGET_CATALOG: WidgetDefinition[] = [
 
 /** Rejilla inicial: lo que ve alguien que abre la app por primera vez. */
 export const DEFAULT_LAYOUT: NewWidget[] = [
-  { kind: "totals", title: "Resumen", config: {}, placement: { x: 0, y: 0, w: 6, h: 4 } },
+  // Las alturas salen de lo que ocupa el contenido lleno: con cuatro filas el
+  // resumen cortaba el balance del periodo y la tabla de bancos escondía la
+  // tercera entidad, que es justo lo que el widget existe para enseñar.
+  { kind: "totals", title: "Resumen", config: {}, placement: { x: 0, y: 0, w: 6, h: 6 } },
   {
     kind: "bank_balances",
     title: "Bancos",
     config: {},
-    placement: { x: 6, y: 0, w: 6, h: 4 },
+    placement: { x: 6, y: 0, w: 6, h: 6 },
   },
   {
     kind: "monthly_flow",
     title: "Ingresos y gastos por mes",
     config: {},
-    placement: { x: 0, y: 4, w: 12, h: 6 },
+    placement: { x: 0, y: 6, w: 12, h: 6 },
   },
   {
     kind: "expense_breakdown",
     title: "Gastos por categoría",
     config: {},
-    placement: { x: 0, y: 10, w: 6, h: 6 },
+    placement: { x: 0, y: 12, w: 6, h: 6 },
   },
   {
     kind: "top_counterparties",
     title: "Dónde se va el dinero",
     config: {},
-    placement: { x: 6, y: 10, w: 6, h: 6 },
+    placement: { x: 6, y: 12, w: 6, h: 6 },
   },
 ];
 
