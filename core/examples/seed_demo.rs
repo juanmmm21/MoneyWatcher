@@ -366,7 +366,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     close_imports(&database, &ledger, &transactions)?;
     let categorization = apply_rules(&mut database)?;
 
-    report(&path, &transactions, summary.inserted, categorization.pending);
+    report(
+        &path,
+        &transactions,
+        summary.inserted,
+        categorization.pending,
+    );
     Ok(())
 }
 
