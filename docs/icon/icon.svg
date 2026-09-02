@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <title>MoneyWatcher</title>
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0" stop-color="#1d2430"/>
+      <stop offset="1" stop-color="#0b0d11"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#6ea8fe"/>
+      <stop offset="1" stop-color="#3fbf87"/>
+    </linearGradient>
+    <linearGradient id="iris" x1="0.15" y1="0" x2="0.85" y2="1">
+      <stop offset="0" stop-color="#a8ccff"/>
+      <stop offset="1" stop-color="#5ad3a1"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" rx="228" fill="url(#plate)"/>
+  <!-- Reflejo superior: separa el icono del fondo oscuro del Dock sin añadir un borde duro. -->
+  <rect x="8" y="8" width="1008" height="1008" rx="220" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="16"/>
+
+  <!-- El párpado es la forma que hace reconocible el icono a 32 px: dos arcos y nada más. -->
+  <path d="M 186 512 Q 512 206 838 512 Q 512 818 186 512 Z"
+        fill="none" stroke="url(#lid)" stroke-width="58" stroke-linejoin="round"/>
+
+  <!-- El anillo del color de la placa despega el iris del párpado allí donde se cruzan. -->
+  <circle cx="512" cy="512" r="146" fill="url(#iris)" stroke="#0d1016" stroke-width="28"/>
+
+  <!-- Euro calado sobre el iris: a tamaño pequeño se lee como pupila y a tamaño
+       grande dice de qué va la aplicación. Se dibuja con un arco y dos barras
+       en vez de con texto para no depender de ninguna fuente instalada. -->
+  <g stroke="#0d1016" fill="none" stroke-width="30" stroke-linecap="round">
+    <path d="M 572 452 A 78 78 0 1 0 572 572"/>
+    <path d="M 410 492 H 556"/>
+    <path d="M 410 534 H 540"/>
+  </g>
+</svg>
