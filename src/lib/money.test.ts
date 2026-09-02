@@ -13,9 +13,8 @@ describe("formatMoney", () => {
     expect(formatMoney("45.12", { showSign: true })).toBe("+45,12 €");
   });
 
-  it("respeta la divisa de la cuenta", () => {
-    expect(formatMoney("10.00", { currency: "USD" })).toBe("10,00 $");
-    expect(formatMoney("10.00", { currency: "CHF" })).toBe("10,00 CHF");
+  it("oculta los céntimos en modo compacto, para los ejes de los gráficos", () => {
+    expect(formatMoney("1234.56", { compact: true })).toBe("1.234 €");
   });
 
   it("no pierde céntimos con importes que un float redondearía", () => {

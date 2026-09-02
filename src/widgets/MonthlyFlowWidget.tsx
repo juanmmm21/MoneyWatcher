@@ -18,7 +18,6 @@ import { WidgetEmpty, WidgetFrame } from "./WidgetFrame";
 interface MonthlyFlowWidgetProps {
   title: string;
   months: MonthlyFlow[];
-  currency: string;
   /** Añade la línea de balance neto sobre las barras. */
   showNet?: boolean;
 }
@@ -36,7 +35,6 @@ interface ChartPoint {
 export function MonthlyFlowWidget({
   title,
   months,
-  currency,
   showNet = true,
 }: MonthlyFlowWidgetProps) {
   if (months.length === 0) {
@@ -69,7 +67,7 @@ export function MonthlyFlowWidget({
             axisLine={false}
             width={64}
             tickFormatter={(value: number) =>
-              formatMoney(String(Math.round(value)), { currency, compact: true })
+              formatMoney(String(Math.round(value)), { compact: true })
             }
           />
           <Tooltip
@@ -81,13 +79,13 @@ export function MonthlyFlowWidget({
                 <div className="chart-tooltip">
                   <strong>{point.label}</strong>
                   <div className="tabular amount--income">
-                    Ingresos {formatMoney(point.raw.income, { currency })}
+                    Ingresos {formatMoney(point.raw.income)}
                   </div>
                   <div className="tabular amount--expense">
-                    Gastos {formatMoney(point.raw.expense, { currency })}
+                    Gastos {formatMoney(point.raw.expense)}
                   </div>
                   <div className="tabular muted">
-                    Balance {formatMoney(point.raw.net, { currency })}
+                    Balance {formatMoney(point.raw.net)}
                   </div>
                 </div>
               );

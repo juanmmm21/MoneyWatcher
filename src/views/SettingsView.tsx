@@ -135,7 +135,7 @@ export function SettingsView({
                     {account.archived ? <span className="badge"> archivada</span> : null}
                   </td>
                   <td className="table__amount tabular">
-                    {formatMoney(account.balance, { currency: account.currency })}
+                    {formatMoney(account.balance)}
                   </td>
                   <td>
                     <button

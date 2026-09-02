@@ -70,11 +70,6 @@ export function TransactionsView({
     [accounts],
   );
 
-  const currencyOf = useCallback(
-    (id: number) => accounts.find((account) => account.id === id)?.currency ?? "EUR",
-    [accounts],
-  );
-
   const assignCategory = useCallback(
     async (transactionId: number, categoryId: number | null) => {
       setActionError(null);
@@ -232,9 +227,7 @@ export function TransactionsView({
                       isNegative(transaction.amount) ? "amount--expense" : "amount--income"
                     }`}
                   >
-                    {formatMoney(transaction.amount, {
-                      currency: currencyOf(transaction.accountId),
-                    })}
+                    {formatMoney(transaction.amount)}
                   </td>
                 </tr>
               ))}

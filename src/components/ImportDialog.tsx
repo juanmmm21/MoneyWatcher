@@ -58,7 +58,6 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
     }
   }, [accountId, path, onImported]);
 
-  const currency = accounts.find((account) => account.id === accountId)?.currency ?? "EUR";
 
   return (
     <div className="dialog-backdrop" role="dialog" aria-modal="true">
@@ -141,7 +140,7 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
                           isNegative(row.amount) ? "amount--expense" : "amount--income"
                         }`}
                       >
-                        {formatMoney(row.amount, { currency })}
+                        {formatMoney(row.amount)}
                       </td>
                     </tr>
                   ))}

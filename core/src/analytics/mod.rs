@@ -8,9 +8,7 @@ use rusqlite::types::Value;
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{CategoryId, Money};
-use crate::storage::{
-    build_where, normalized_currency, Database, StorageResult, TransactionFilter,
-};
+use crate::storage::{build_where, Database, StorageResult, TransactionFilter};
 
 /// Totales del periodo consultado.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,16 +48,10 @@ pub struct CategorySlice {
 
 /// Resumen por banco: es la vista que el usuario tiene en la cabeza cuando
 /// organiza su dinero (una lista de ingresos y otra de gastos por entidad).
-///
-/// La fila es por entidad **y divisa**: un banco con cuentas en euros y en
-/// libras da dos filas, porque sumarlas en una sola sería inventarse un tipo
-/// de cambio.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BankSummary {
     pub bank: String,
-    /// Código ISO 4217 de las cuentas que componen la fila.
-    pub currency: String,
     pub accounts: i64,
     pub balance: Money,
     pub income: Money,
@@ -200,58 +192,41 @@ impl Database {
 
         let shifted_clause = shift_placeholders(&flow_clause, placeholder_offset);
 
-        // La divisa se repite en el nivel externo: si no, una cuenta en libras
-        // seguiría dando su fila (con flujo cero) al mirar el dashboard en euros.
-        let currency_clause = match normalized_currency(filter.currency.as_deref()) {
-            Some(currency) => {
-                values.push(Value::from(currency));
-                format!(" AND a.currency = ?{}", values.len())
-            }
-            None => String::new(),
-        };
-
-        // Las subconsultas se atan a la divisa de la fila además de al banco:
-        // si no, el saldo de la fila en euros arrastraría los movimientos de la
-        // cuenta en libras de la misma entidad.
         let sql = format!(
             "SELECT
                  a.bank,
-                 a.currency,
                  COUNT(DISTINCT a.id),
                  COALESCE(SUM(a.opening_balance), 0) + COALESCE((
                      SELECT SUM(t.amount) FROM transactions t
                      JOIN accounts inner_a ON inner_a.id = t.account_id
-                     WHERE inner_a.bank = a.bank AND inner_a.currency = a.currency
+                     WHERE inner_a.bank = a.bank
                  ), 0),
                  COALESCE((
                      SELECT SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END)
                      FROM transactions t
                      JOIN accounts inner_a ON inner_a.id = t.account_id
-                     WHERE inner_a.bank = a.bank
-                       AND inner_a.currency = a.currency{shifted_clause}
+                     WHERE inner_a.bank = a.bank{shifted_clause}
                  ), 0),
                  COALESCE((
                      SELECT SUM(CASE WHEN t.amount < 0 THEN -t.amount ELSE 0 END)
                      FROM transactions t
                      JOIN accounts inner_a ON inner_a.id = t.account_id
-                     WHERE inner_a.bank = a.bank
-                       AND inner_a.currency = a.currency{flow_clause}
+                     WHERE inner_a.bank = a.bank{flow_clause}
                  ), 0)
              FROM accounts a
-             WHERE a.archived = 0{currency_clause}
-             GROUP BY a.bank, a.currency
-             ORDER BY a.bank COLLATE NOCASE, a.currency"
+             WHERE a.archived = 0
+             GROUP BY a.bank
+             ORDER BY a.bank COLLATE NOCASE"
         );
 
         let mut statement = self.connection().prepare(&sql)?;
         let rows = statement.query_map(params_from_iter(values.iter()), |row| {
             Ok(BankSummary {
                 bank: row.get(0)?,
-                currency: row.get(1)?,
-                accounts: row.get(2)?,
-                balance: Money::from_minor_units(row.get(3)?),
-                income: Money::from_minor_units(row.get(4)?),
-                expense: Money::from_minor_units(row.get(5)?),
+                accounts: row.get(1)?,
+                balance: Money::from_minor_units(row.get(2)?),
+                income: Money::from_minor_units(row.get(3)?),
+                expense: Money::from_minor_units(row.get(4)?),
             })
         })?;
 

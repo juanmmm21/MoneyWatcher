@@ -21,7 +21,6 @@ export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
   const [bank, setBank] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AccountKind>("checking");
-  const [currency, setCurrency] = useState("EUR");
   const [openingBalance, setOpeningBalance] = useState("0.00");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -34,7 +33,6 @@ export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
         name: name.trim(),
         bank: bank.trim(),
         kind,
-        currency,
         // El núcleo acepta la cadena tal cual y la valida al parsearla, así que
         // se envía sin tocar: nada de convertir a número por el camino.
         openingBalance: openingBalance.trim() === "" ? "0.00" : openingBalance.trim(),
@@ -93,15 +91,6 @@ export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
               </select>
             </label>
 
-            <label className="field" style={{ width: 110 }}>
-              Divisa
-              <input
-                className="input"
-                value={currency}
-                onChange={(event) => setCurrency(event.target.value.toUpperCase())}
-                maxLength={3}
-              />
-            </label>
 
             <label className="field" style={{ width: 140 }}>
               Saldo inicial

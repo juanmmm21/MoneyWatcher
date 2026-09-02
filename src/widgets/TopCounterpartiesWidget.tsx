@@ -6,7 +6,6 @@ import { WidgetEmpty, WidgetFrame } from "./WidgetFrame";
 interface TopCounterpartiesWidgetProps {
   title: string;
   counterparties: CounterpartyTotal[];
-  currency: string;
 }
 
 /**
@@ -16,7 +15,6 @@ interface TopCounterpartiesWidgetProps {
 export function TopCounterpartiesWidget({
   title,
   counterparties,
-  currency,
 }: TopCounterpartiesWidgetProps) {
   if (counterparties.length === 0) {
     return (
@@ -40,7 +38,7 @@ export function TopCounterpartiesWidget({
               >
                 {entry.label}
               </span>
-              <span className="tabular small">{formatMoney(entry.total, { currency })}</span>
+              <span className="tabular small">{formatMoney(entry.total)}</span>
             </div>
             <div
               style={{

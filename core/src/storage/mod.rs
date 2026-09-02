@@ -14,9 +14,8 @@ use std::path::Path;
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
-pub use accounts::CurrencyUsage;
 pub use imports::ImportRecord;
-pub(crate) use transactions::{build_where, normalized_currency};
+pub(crate) use transactions::build_where;
 pub use transactions::{InsertSummary, TransactionFilter};
 pub use widgets::{NewWidget, Widget, WidgetPlacement};
 
@@ -38,6 +37,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         3,
         "translate_seed_categories",
         include_str!("../../migrations/0003_translate_seed_categories.sql"),
+    ),
+    (
+        4,
+        "drop_account_currency",
+        include_str!("../../migrations/0004_drop_account_currency.sql"),
     ),
 ];
 

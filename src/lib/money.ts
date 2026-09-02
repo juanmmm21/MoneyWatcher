@@ -1,7 +1,7 @@
 import type { MoneyString } from "../types/ipc";
 
 /**
- * Formateo de importes.
+ * Formateo de importes. La app trabaja solo en euros.
  *
  * Los cálculos ya vienen hechos del núcleo; aquí solo se presenta. Aun así se
  * trabaja sobre la cadena decimal en lugar de convertirla a `number`, para que
@@ -25,7 +25,6 @@ function groupThousands(units: string, separator: string): string {
 }
 
 export interface FormatOptions {
-  currency?: string;
   /** Oculta los céntimos (útil en ejes de gráficos). */
   compact?: boolean;
   /** Antepone el signo también a los positivos. */
@@ -33,28 +32,14 @@ export interface FormatOptions {
 }
 
 export function formatMoney(amount: MoneyString, options: FormatOptions = {}): string {
-  const { currency = "EUR", compact = false, showSign = false } = options;
+  const { compact = false, showSign = false } = options;
   const { negative, units, cents } = split(amount);
 
   const grouped = groupThousands(units, ".");
   const body = compact ? grouped : `${grouped},${cents}`;
-  const symbol = currencySymbol(currency);
   const sign = negative ? "−" : showSign ? "+" : "";
 
-  return `${sign}${body} ${symbol}`.trim();
-}
-
-export function currencySymbol(currency: string): string {
-  switch (currency.toUpperCase()) {
-    case "EUR":
-      return "€";
-    case "USD":
-      return "$";
-    case "GBP":
-      return "£";
-    default:
-      return currency.toUpperCase();
-  }
+  return `${sign}${body} €`;
 }
 
 /** Signo del importe sin convertirlo a número. */

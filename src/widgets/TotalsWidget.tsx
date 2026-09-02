@@ -6,11 +6,10 @@ import { WidgetFrame } from "./WidgetFrame";
 interface TotalsWidgetProps {
   title: string;
   totals: FlowTotals;
-  currency: string;
 }
 
 /** Los cuatro números que resumen el periodo: entra, sale, queda y qué parte se ahorra. */
-export function TotalsWidget({ title, totals, currency }: TotalsWidgetProps) {
+export function TotalsWidget({ title, totals }: TotalsWidgetProps) {
   const netIsPositive = !totals.net.startsWith("-");
 
   return (
@@ -19,13 +18,13 @@ export function TotalsWidget({ title, totals, currency }: TotalsWidgetProps) {
         <div className="stat">
           <span className="stat__label">Ingresos</span>
           <span className="stat__value tabular amount--income">
-            {formatMoney(totals.income, { currency })}
+            {formatMoney(totals.income)}
           </span>
         </div>
         <div className="stat">
           <span className="stat__label">Gastos</span>
           <span className="stat__value tabular amount--expense">
-            {formatMoney(totals.expense, { currency })}
+            {formatMoney(totals.expense)}
           </span>
         </div>
         <div className="stat">
@@ -33,7 +32,7 @@ export function TotalsWidget({ title, totals, currency }: TotalsWidgetProps) {
           <span
             className={`stat__value tabular ${netIsPositive ? "amount--income" : "amount--expense"}`}
           >
-            {formatMoney(totals.net, { currency })}
+            {formatMoney(totals.net)}
           </span>
         </div>
         <div className="stat">

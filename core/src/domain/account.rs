@@ -50,8 +50,6 @@ pub struct Account {
     pub name: String,
     pub bank: String,
     pub kind: AccountKind,
-    /// Código ISO 4217 en mayúsculas (`"EUR"`).
-    pub currency: String,
     pub opening_balance: Money,
     pub archived: bool,
 }
@@ -62,6 +60,5 @@ pub struct NewAccount {
     pub name: String,
     pub bank: String,
     pub kind: AccountKind,
-    pub currency: String,
     pub opening_balance: Money,
 }

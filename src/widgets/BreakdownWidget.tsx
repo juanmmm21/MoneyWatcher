@@ -8,13 +8,12 @@ import { WidgetEmpty, WidgetFrame } from "./WidgetFrame";
 interface BreakdownWidgetProps {
   title: string;
   slices: CategorySlice[];
-  currency: string;
   /** Cuántas categorías se listan bajo el gráfico. */
   limit?: number;
 }
 
 /** Reparto por categoría, con la leyenda como lista ordenada por peso. */
-export function BreakdownWidget({ title, slices, currency, limit = 6 }: BreakdownWidgetProps) {
+export function BreakdownWidget({ title, slices, limit = 6 }: BreakdownWidgetProps) {
   if (slices.length === 0) {
     return (
       <WidgetFrame title={title}>
@@ -51,7 +50,7 @@ export function BreakdownWidget({ title, slices, currency, limit = 6 }: Breakdow
                   return (
                     <div className="chart-tooltip">
                       <strong>{slice.name}</strong>
-                      <div className="tabular">{formatMoney(slice.total, { currency })}</div>
+                      <div className="tabular">{formatMoney(slice.total)}</div>
                       <div className="muted">{(slice.shareBps / 100).toFixed(1)} %</div>
                     </div>
                   );
@@ -77,7 +76,7 @@ export function BreakdownWidget({ title, slices, currency, limit = 6 }: Breakdow
                 </span>
               </span>
               <span className="tabular small muted">
-                {formatMoney(slice.total, { currency })}
+                {formatMoney(slice.total)}
               </span>
             </li>
           ))}

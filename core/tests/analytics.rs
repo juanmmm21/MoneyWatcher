@@ -42,7 +42,6 @@ fn seeded_database() -> (Database, AccountId, AccountId) {
             name: "Nómina".into(),
             bank: "Santander".into(),
             kind: AccountKind::Checking,
-            currency: "EUR".into(),
             opening_balance: Money::from_minor_units(100_000),
         })
         .unwrap();
@@ -52,7 +51,6 @@ fn seeded_database() -> (Database, AccountId, AccountId) {
             name: "Ahorro".into(),
             bank: "BBVA".into(),
             kind: AccountKind::Savings,
-            currency: "EUR".into(),
             opening_balance: Money::from_minor_units(500_000),
         })
         .unwrap();
@@ -199,7 +197,6 @@ fn bank_summaries_include_opening_balance_and_period_flow() {
 
     let bbva = &summaries[0];
     assert_eq!(bbva.bank, "BBVA");
-    assert_eq!(bbva.currency, "EUR");
     assert_eq!(bbva.balance, Money::from_minor_units(550_000));
     assert_eq!(bbva.income, Money::from_minor_units(50_000));
 
@@ -210,128 +207,6 @@ fn bank_summaries_include_opening_balance_and_period_flow() {
     // El flujo, en cambio, solo cuenta marzo.
     assert_eq!(santander.income, Money::from_minor_units(185_000));
     assert_eq!(santander.expense, Money::from_minor_units(5_100));
-}
-
-/// El caso que hoy daba números falsos: una entidad con una cuenta en euros y
-/// otra en libras. Ni los totales ni la tabla de bancos pueden mezclarlas.
-fn multi_currency_database() -> (Database, AccountId, AccountId) {
-    let mut database = Database::open_in_memory().expect("base de datos en memoria");
-
-    let euros = database
-        .create_account(&NewAccount {
-            name: "Euros".into(),
-            bank: "Revolut".into(),
-            kind: AccountKind::Checking,
-            currency: "EUR".into(),
-            opening_balance: Money::from_minor_units(20_000),
-        })
-        .unwrap();
-
-    let pounds = database
-        .create_account(&NewAccount {
-            name: "Libras".into(),
-            bank: "Revolut".into(),
-            kind: AccountKind::Checking,
-            currency: "GBP".into(),
-            opening_balance: Money::from_minor_units(10_000),
-        })
-        .unwrap();
-
-    database
-        .insert_transactions(&[
-            movement(euros.id, date(2026, 3, 2), "MERCADONA", None, -3_000),
-            movement(euros.id, date(2026, 3, 3), "NOMINA", None, 100_000),
-            movement(pounds.id, date(2026, 3, 4), "TESCO", None, -1_500),
-            movement(pounds.id, date(2026, 3, 5), "SALARY", None, 50_000),
-        ])
-        .unwrap();
-
-    (database, euros.id, pounds.id)
-}
-
-#[test]
-fn totals_only_add_up_accounts_of_the_requested_currency() {
-    let (database, _, _) = multi_currency_database();
-
-    let pounds = database
-        .flow_totals(&TransactionFilter {
-            currency: Some("GBP".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(pounds.income, Money::from_minor_units(50_000));
-    assert_eq!(pounds.expense, Money::from_minor_units(1_500));
-
-    let euros = database
-        .flow_totals(&TransactionFilter {
-            currency: Some("EUR".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(euros.income, Money::from_minor_units(100_000));
-    assert_eq!(euros.expense, Money::from_minor_units(3_000));
-}
-
-#[test]
-fn bank_summaries_split_one_bank_into_one_row_per_currency() {
-    let (database, _, _) = multi_currency_database();
-
-    let all = database
-        .bank_summaries(&TransactionFilter::default())
-        .unwrap();
-    assert_eq!(all.len(), 2, "una misma entidad da una fila por divisa");
-    assert_eq!(all[0].currency, "EUR");
-    assert_eq!(all[0].balance, Money::from_minor_units(117_000));
-    assert_eq!(all[1].currency, "GBP");
-    assert_eq!(all[1].balance, Money::from_minor_units(58_500));
-
-    let only_pounds = database
-        .bank_summaries(&TransactionFilter {
-            currency: Some("GBP".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(only_pounds.len(), 1);
-    assert_eq!(only_pounds[0].currency, "GBP");
-    assert_eq!(only_pounds[0].income, Money::from_minor_units(50_000));
-    assert_eq!(only_pounds[0].expense, Money::from_minor_units(1_500));
-}
-
-#[test]
-fn monthly_flow_and_categories_stay_within_one_currency() {
-    let (database, _, _) = multi_currency_database();
-
-    let months = database
-        .monthly_flow(&TransactionFilter {
-            currency: Some("GBP".into()),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(months.len(), 1);
-    assert_eq!(months[0].net, Money::from_minor_units(48_500));
-
-    let breakdown = database
-        .category_breakdown(&TransactionFilter {
-            currency: Some("GBP".into()),
-            direction: Some(Direction::Expense),
-            ..Default::default()
-        })
-        .unwrap();
-    assert_eq!(breakdown.len(), 1);
-    assert_eq!(breakdown[0].total, Money::from_minor_units(1_500));
-
-    let top = database
-        .top_counterparties(
-            &TransactionFilter {
-                currency: Some("GBP".into()),
-                direction: Some(Direction::Expense),
-                ..Default::default()
-            },
-            5,
-        )
-        .unwrap();
-    assert_eq!(top.len(), 1);
-    assert_eq!(top[0].label, "TESCO");
 }
 
 #[test]

@@ -22,7 +22,6 @@ export interface Account {
   name: string;
   bank: string;
   kind: AccountKind;
-  currency: string;
   openingBalance: MoneyString;
   archived: boolean;
   balance: MoneyString;
@@ -32,7 +31,6 @@ export interface NewAccount {
   name: string;
   bank: string;
   kind: AccountKind;
-  currency: string;
   openingBalance: MoneyString;
 }
 
@@ -68,21 +66,10 @@ export interface TransactionFilter {
   direction?: Direction | null;
   search?: string | null;
   uncategorizedOnly?: boolean;
-  /**
-   * Restringe la consulta a las cuentas de esta divisa (ISO 4217). Es lo que
-   * impide que una agregación sume importes de divisas distintas.
-   */
-  currency?: string | null;
   limit?: number | null;
   offset?: number | null;
 }
 
-/** Divisa presente en las cuentas del usuario, con lo que hay dentro. */
-export interface CurrencyUsage {
-  currency: string;
-  accounts: number;
-  transactions: number;
-}
 
 export interface TransactionPage {
   transactions: Transaction[];
@@ -150,8 +137,6 @@ export interface CategorySlice {
 
 export interface BankSummary {
   bank: string;
-  /** Divisa de las cuentas de la fila: una entidad da una fila por divisa. */
-  currency: string;
   accounts: number;
   balance: MoneyString;
   income: MoneyString;
@@ -165,14 +150,6 @@ export interface CounterpartyTotal {
 }
 
 export interface DashboardOverview {
-  /**
-   * Divisa a la que corresponden todos los importes del resumen. La resuelve el
-   * núcleo, así que es siempre la que de verdad se ha agregado; null solo
-   * cuando todavía no hay ninguna cuenta.
-   */
-  currency: string | null;
-  /** Divisas entre las que puede elegir el usuario, la más usada primero. */
-  currencies: CurrencyUsage[];
   totals: FlowTotals;
   monthly: MonthlyFlow[];
   expensesByCategory: CategorySlice[];

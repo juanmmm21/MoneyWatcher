@@ -107,38 +107,25 @@ export function widgetDefinition(kind: string): WidgetDefinition | undefined {
   return WIDGET_CATALOG.find((definition) => definition.kind === kind);
 }
 
-export function renderWidget(
-  widget: Widget,
-  overview: DashboardOverview,
-  currency: string,
-): ReactElement {
+export function renderWidget(widget: Widget, overview: DashboardOverview): ReactElement {
   switch (widget.kind as WidgetKind) {
     case "totals":
-      return <TotalsWidget title={widget.title} totals={overview.totals} currency={currency} />;
+      return <TotalsWidget title={widget.title} totals={overview.totals} />;
     case "monthly_flow":
       return (
         <MonthlyFlowWidget
           title={widget.title}
           months={overview.monthly}
-          currency={currency}
           showNet={widget.config.showNet !== false}
         />
       );
     case "expense_breakdown":
       return (
-        <BreakdownWidget
-          title={widget.title}
-          slices={overview.expensesByCategory}
-          currency={currency}
-        />
+        <BreakdownWidget title={widget.title} slices={overview.expensesByCategory} />
       );
     case "income_breakdown":
       return (
-        <BreakdownWidget
-          title={widget.title}
-          slices={overview.incomeByCategory}
-          currency={currency}
-        />
+        <BreakdownWidget title={widget.title} slices={overview.incomeByCategory} />
       );
     case "bank_balances":
       return <BankBalancesWidget title={widget.title} banks={overview.banks} />;
@@ -147,7 +134,6 @@ export function renderWidget(
         <TopCounterpartiesWidget
           title={widget.title}
           counterparties={overview.topCounterparties}
-          currency={currency}
         />
       );
     default:
