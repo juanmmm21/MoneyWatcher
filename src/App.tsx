@@ -38,10 +38,6 @@ export function App() {
   const period = useMemo(() => buildPeriod(periodId), [periodId]);
   const filter = useMemo(() => periodFilter(period, []), [period]);
 
-  // Todas las cuentas suelen compartir divisa; se toma la de la primera como
-  // divisa de presentación de los totales agregados.
-  const currency = accounts.data?.[0]?.currency ?? "EUR";
-
   const openTransactions = useCallback((pending: boolean) => {
     setOnlyPending(pending);
     setSection("transactions");
@@ -150,7 +146,6 @@ export function App() {
           {section === "dashboard" ? (
             <DashboardView
               filter={filter}
-              currency={currency}
               dataVersion={dataVersion}
               onReviewPending={() => openTransactions(true)}
             />

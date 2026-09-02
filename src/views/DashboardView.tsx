@@ -12,7 +12,6 @@ const ROW_HEIGHT = 44;
 
 interface DashboardViewProps {
   filter: TransactionFilter;
-  currency: string;
   /** Cambia cuando los datos se modifican fuera de esta vista (una importación). */
   dataVersion: number;
   onReviewPending: () => void;
@@ -23,19 +22,17 @@ interface DashboardViewProps {
  * soltar el ratón, no en cada píxel arrastrado, para no escribir en disco
  * durante toda la interacción.
  */
-export function DashboardView({
-  filter,
-  currency,
-  dataVersion,
-  onReviewPending,
-}: DashboardViewProps) {
+export function DashboardView({ filter, dataVersion, onReviewPending }: DashboardViewProps) {
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [widgetsError, setWidgetsError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  // `null` es «la que decida el núcleo»: sin elección explícita se agrega la
+  // divisa con más movimientos, no la de la primera cuenta que se creó.
+  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
 
   const overview = useAsync<DashboardOverview>(
-    () => api.dashboardOverview(filter),
-    [JSON.stringify(filter), dataVersion],
+    () => api.dashboardOverview({ ...filter, currency: selectedCurrency }),
+    [JSON.stringify(filter), selectedCurrency, dataVersion],
   );
 
   const loadWidgets = useCallback(async () => {
@@ -136,9 +133,35 @@ export function DashboardView({
     return <div className="muted">Cargando…</div>;
   }
 
+  // Todos los importes del resumen vienen ya agregados en esta divisa, así que
+  // es la única con la que se pueden rotular sin mentir.
+  const { currency, currencies } = overview.data;
+
   return (
     <div className="stack">
       {widgetsError ? <div className="banner banner--error">{widgetsError}</div> : null}
+
+      {currencies.length > 1 ? (
+        <div className="banner">
+          <span>
+            Tienes cuentas en {currencies.length} divisas y no se pueden sumar entre sí. El
+            dashboard muestra una cada vez: ahora mismo, <strong>{currency}</strong>.
+          </span>
+          <span className="topbar__spacer" />
+          <select
+            className="select"
+            value={currency ?? ""}
+            onChange={(event) => setSelectedCurrency(event.target.value)}
+          >
+            {currencies.map((usage) => (
+              <option key={usage.currency} value={usage.currency}>
+                {usage.currency} · {usage.transactions}{" "}
+                {usage.transactions === 1 ? "movimiento" : "movimientos"}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       {overview.data.uncategorized > 0 ? (
         <div className="banner banner--warning">
@@ -198,7 +221,7 @@ export function DashboardView({
       >
         {widgets.map((widget) => (
           <div key={String(widget.id)} style={{ position: "relative" }}>
-            {renderWidget(widget, overview.data!, currency)}
+            {renderWidget(widget, overview.data!, currency ?? "")}
             <button
               type="button"
               className="button button--ghost"
