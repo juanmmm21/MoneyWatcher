@@ -8,6 +8,24 @@ server — the whole app is a single binary and a SQLite file in your user direc
 
 ---
 
+## What it looks like
+
+![The dashboard: a grid of widgets over a year of movements](docs/screenshots/dashboard.png)
+
+| Movements | Rules |
+| --- | --- |
+| [![The movements table with filters and inline category editing](docs/screenshots/transactions.png)](docs/screenshots/transactions.png) | [![The rules view, with each rule's origin and hit count](docs/screenshots/rules.png)](docs/screenshots/rules.png) |
+| Filter, search and fix a category inline — the fix teaches a rule. | Rules you wrote, rules learnt from your corrections, rules accepted from the assistant. |
+
+| Settings | Dark theme |
+| --- | --- |
+| [![Settings: accounts, assistant and recent imports](docs/screenshots/settings.png)](docs/screenshots/settings.png) | [![The dashboard in the dark theme](docs/screenshots/dashboard-dark.png)](docs/screenshots/dashboard-dark.png) |
+| Accounts, the optional local assistant, and every import with an undo. | The app follows the system theme. |
+
+Every figure above comes from a synthetic dataset — invented banks, invented shops — built by
+`cargo run -p moneywatcher-core --example seed_demo`. No real statement is involved, here or
+anywhere else in this repository.
+
 ## What it solves
 
 Most people keep their finances in a spreadsheet: one sheet per bank, incomes on one side,
@@ -225,6 +243,27 @@ npm test
 The Rust test suite covers the money type, the SQLite repositories and migrations, the statement
 importer (against synthetic statements in `core/tests/fixtures/`), the rule engine and every
 dashboard aggregation.
+
+### Running against a demo database
+
+The app opens the database in your user data directory, which is where your own finances live.
+`MONEYWATCHER_DATA_DIR` points it somewhere else, so you can develop — or take screenshots —
+against invented data without touching it:
+
+```bash
+cargo run -p moneywatcher-core --example seed_demo -- /tmp/moneywatcher-demo
+MONEYWATCHER_DATA_DIR=/tmp/moneywatcher-demo npm run tauri dev
+```
+
+`seed_demo` builds three accounts at invented banks, fourteen months of movements and a handful of
+rules, all from a fixed seed, so the same command always produces the same figures. It refuses to
+write over an existing database.
+
+### Regenerating the icon
+
+The app icon is a single SVG in `docs/icon/icon.svg`. `bash docs/icon/generate.sh` rasterises it and
+writes every size the bundler needs — PNGs, the macOS `.icns` and the Windows `.ico` — using only
+tools that ship with macOS.
 
 ## Troubleshooting
 
