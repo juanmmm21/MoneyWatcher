@@ -1,211 +1,16 @@
-use chrono::NaiveDate;
-use serde::{Deserialize, Serialize};
+//! Lectura de extractos en CSV: encoding, delimitador y celdas. Todo lo que
+//! pasa después (cabecera, columnas, importes) es común a todos los formatos y
+//! vive en `statement`.
 
-use crate::domain::{AccountId, ImportId, Money, NewTransaction, TransactionSource};
-
-use super::dates::{self, DateOrder};
 use super::decode::decode;
-use super::mapping::{self, AmountColumns, ColumnMapping};
+use super::statement::{
+    build_preview, detect_date_order, find_header_in, Candidate, GridRow, ImportError,
+    StatementPreview, StatementSource,
+};
 
 /// Delimitadores que se prueban al abrir un extracto, en orden de frecuencia
 /// en la banca europea: punto y coma, coma, tabulador y barra vertical.
 const DELIMITERS: [u8; 4] = *b";,\t|";
-/// Cuántas filas iniciales se inspeccionan buscando la cabecera. Los extractos
-/// suelen traer antes un preámbulo con titular, IBAN y fechas del periodo.
-/// Cuántas filas se miran buscando la cabecera. Un extracto normal la trae en
-/// las primeras líneas, pero los informes de banca electrónica (Revolut y
-/// varios agregadores) meten antes los datos de la cuenta, la entidad y los
-/// resúmenes de saldo: en un caso real la tabla empezaba en la línea 185.
-const MAX_HEADER_SCAN: usize = 500;
-
-#[derive(Debug, thiserror::Error)]
-pub enum ImportError {
-    #[error("the file is empty")]
-    Empty,
-    #[error("could not find a header row with a date, a description and an amount")]
-    HeaderNotFound,
-    #[error("the file has a header but no readable movements")]
-    NoValidRows,
-    #[error("malformed csv: {0}")]
-    Csv(#[from] csv::Error),
-}
-
-/// Una fila del extracto ya interpretada, antes de tocar la base de datos.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ParsedRow {
-    /// Línea del fichero original (1-based), para poder señalarla en la UI.
-    pub line: u64,
-    pub booked_on: NaiveDate,
-    pub value_on: Option<NaiveDate>,
-    pub description: String,
-    pub counterparty: Option<String>,
-    pub amount: Money,
-    /// Comisión que el extracto cobra aparte del importe, si trae una columna
-    /// propia para ella. Se guarda para poder enseñarla en la vista previa
-    /// aunque ya esté descontada de `amount`.
-    pub fee: Option<Money>,
-    pub balance_after: Option<Money>,
-}
-
-impl ParsedRow {
-    pub fn to_new_transaction(
-        &self,
-        account_id: AccountId,
-        import_id: Option<ImportId>,
-    ) -> NewTransaction {
-        NewTransaction {
-            account_id,
-            booked_on: self.booked_on,
-            value_on: self.value_on,
-            description: self.description.clone(),
-            counterparty: self.counterparty.clone(),
-            amount: self.amount,
-            balance_after: self.balance_after,
-            category_id: None,
-            notes: None,
-            source: TransactionSource::Imported,
-            import_id,
-        }
-    }
-}
-
-/// Fila que no se pudo interpretar, con el motivo, para enseñárselo al usuario
-/// en vez de descartarla en silencio.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SkippedRow {
-    pub line: u64,
-    pub reason: String,
-}
-
-/// Resultado de leer un extracto: qué se entendió del fichero y qué filas salen.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct StatementPreview {
-    pub delimiter: char,
-    /// Línea del fichero en la que está la cabecera (ver `ParsedRow::line`).
-    pub header_line: u64,
-    pub headers: Vec<String>,
-    pub mapping: ColumnMapping,
-    pub rows: Vec<ParsedRow>,
-    pub skipped: Vec<SkippedRow>,
-    /// La comisión de cada fila se ha restado de su importe porque, sin
-    /// hacerlo, el saldo que declara el propio extracto no cuadraba.
-    pub fee_applied: bool,
-}
-
-/// Una fila en la que el salto de saldo del extracto no coincide con el importe
-/// que se ha leído de esa misma fila.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BalanceMismatch {
-    pub line: u64,
-    /// Lo que dice la columna de saldo que se movió.
-    pub expected: Money,
-    /// Lo que se ha leído de la columna de importe.
-    pub found: Money,
-}
-
-/// Contraste entre los importes leídos y la columna de saldo del propio
-/// extracto. Es la comprobación que decide si un formato nuevo se ha entendido
-/// bien: si el banco dice que tras cada movimiento quedaban X, la diferencia
-/// entre dos saldos consecutivos tiene que ser exactamente el importe de en
-/// medio, al céntimo.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BalanceCheck {
-    pub matched: usize,
-    pub mismatches: Vec<BalanceMismatch>,
-    /// El fichero va del movimiento más antiguo al más reciente.
-    pub oldest_first: bool,
-}
-
-impl BalanceCheck {
-    pub fn is_consistent(&self) -> bool {
-        self.mismatches.is_empty()
-    }
-}
-
-impl StatementPreview {
-    pub fn total_amount(&self) -> Money {
-        self.rows.iter().map(|row| row.amount).sum()
-    }
-
-    /// Comprueba los importes contra la columna de saldo, si el extracto la
-    /// trae. Devuelve `None` cuando no hay saldos suficientes que contrastar.
-    ///
-    /// El orden de las filas no se da por supuesto: los extractos llegan tanto
-    /// del movimiento más antiguo al más reciente como al revés, así que se
-    /// prueban los dos sentidos y gana el que cuadra más veces.
-    pub fn balance_check(&self) -> Option<BalanceCheck> {
-        balance_check_of(&self.rows)
-    }
-}
-
-/// Misma comprobación sobre una lista de filas suelta: el importador la usa
-/// para decidir entre dos lecturas posibles del mismo fichero antes de tener
-/// una vista previa montada.
-fn balance_check_of(rows: &[ParsedRow]) -> Option<BalanceCheck> {
-    let ascending = check_in_order(rows, true);
-    let descending = check_in_order(rows, false);
-
-    match (ascending, descending) {
-        (Some(ascending), Some(descending)) => {
-            if descending.matched > ascending.matched {
-                Some(descending)
-            } else {
-                Some(ascending)
-            }
-        }
-        (ascending, descending) => ascending.or(descending),
-    }
-}
-
-fn check_in_order(rows: &[ParsedRow], oldest_first: bool) -> Option<BalanceCheck> {
-    let mut matched = 0;
-    let mut mismatches = Vec::new();
-    let mut pairs = 0;
-
-    for window in rows.windows(2) {
-        let (previous, current) = (&window[0], &window[1]);
-        let (Some(previous_balance), Some(current_balance)) =
-            (previous.balance_after, current.balance_after)
-        else {
-            continue;
-        };
-
-        pairs += 1;
-        // Leído de más antiguo a más reciente, el saldo de una fila es el de
-        // la anterior más su propio importe; al revés, el movimiento que
-        // explica el salto es el de la fila anterior.
-        let (expected, row) = if oldest_first {
-            (current_balance - previous_balance, current)
-        } else {
-            (previous_balance - current_balance, previous)
-        };
-
-        if expected == row.amount {
-            matched += 1;
-        } else {
-            mismatches.push(BalanceMismatch {
-                line: row.line,
-                expected,
-                found: row.amount,
-            });
-        }
-    }
-
-    if pairs == 0 {
-        return None;
-    }
-
-    Some(BalanceCheck {
-        matched,
-        mismatches,
-        oldest_first,
-    })
-}
 
 /// Lee un extracto CSV detectando por su cuenta delimitador, codificación,
 /// fila de cabecera, mapeo de columnas y formato de fecha.
@@ -215,9 +20,17 @@ pub fn parse_csv(bytes: &[u8]) -> Result<StatementPreview, ImportError> {
         return Err(ImportError::Empty);
     }
 
+    // Se prueban todos los delimitadores y gana el que produce una tabla con
+    // sentido: uno equivocado deja casi todo en una sola columna.
     let mut best: Option<(usize, Candidate)> = None;
     for delimiter in DELIMITERS {
-        let Some(candidate) = find_header(&text, delimiter)? else {
+        let rows = read_rows(&text, delimiter)?;
+        let Some(candidate) = find_header_in(
+            &rows,
+            StatementSource::Csv {
+                delimiter: delimiter as char,
+            },
+        ) else {
             continue;
         };
         let score = candidate.score();
@@ -240,38 +53,16 @@ pub fn parse_csv(bytes: &[u8]) -> Result<StatementPreview, ImportError> {
     Ok(preview)
 }
 
-struct Candidate {
-    delimiter: u8,
-    header_line: u64,
-    headers: Vec<String>,
-    mapping: ColumnMapping,
-    /// Filas de datos con la línea del fichero en la que aparecen, para poder
-    /// señalar en la interfaz exactamente qué línea no se pudo leer.
-    records: Vec<(u64, Vec<String>)>,
-    /// Línea en la que empieza otra tabla, si el fichero trae más de una.
-    next_table: Option<u64>,
-}
-
-impl Candidate {
-    /// Un delimitador acertado produce cabeceras reconocibles y filas de datos;
-    /// uno equivocado deja casi todo en una sola columna.
-    fn score(&self) -> usize {
-        let mapped = 3
-            + usize::from(self.mapping.value_on.is_some())
-            + usize::from(self.mapping.counterparty.is_some())
-            + usize::from(self.mapping.balance.is_some());
-        mapped * 10 + self.records.len().min(50)
-    }
-}
-
-fn find_header(text: &str, delimiter: u8) -> Result<Option<Candidate>, ImportError> {
+/// Celdas del fichero con su número de línea. `flexible` permite que las filas
+/// del preámbulo tengan menos columnas que la tabla sin abortar la lectura.
+fn read_rows(text: &str, delimiter: u8) -> Result<Vec<GridRow>, ImportError> {
     let mut reader = csv::ReaderBuilder::new()
         .delimiter(delimiter)
         .flexible(true)
         .has_headers(false)
         .from_reader(text.as_bytes());
 
-    let mut rows: Vec<(u64, Vec<String>)> = Vec::new();
+    let mut rows: Vec<GridRow> = Vec::new();
     for record in reader.records() {
         let record = record?;
         let line = record
@@ -286,199 +77,5 @@ fn find_header(text: &str, delimiter: u8) -> Result<Option<Candidate>, ImportErr
                 .collect(),
         ));
     }
-
-    for (index, (line, row)) in rows.iter().take(MAX_HEADER_SCAN).enumerate() {
-        if row.iter().filter(|cell| !cell.is_empty()).count() < 3 {
-            continue;
-        }
-
-        let Some(mapping) = mapping::detect(row) else {
-            continue;
-        };
-
-        // Un informe puede traer una tabla por cuenta o divisa, cada una con su
-        // propia cabecera. Seguir leyendo más allá de la siguiente cabecera
-        // mezclaría movimientos de otra moneda en la cuenta elegida, así que la
-        // importación se queda en la primera tabla.
-        let mut records: Vec<(u64, Vec<String>)> = Vec::new();
-        let mut next_table: Option<u64> = None;
-        for (line, data) in &rows[index + 1..] {
-            if data.iter().all(|cell| cell.is_empty()) {
-                continue;
-            }
-            if mapping::detect(data).is_some() {
-                next_table = Some(*line);
-                break;
-            }
-            records.push((*line, data.clone()));
-        }
-
-        if records.is_empty() {
-            continue;
-        }
-
-        return Ok(Some(Candidate {
-            delimiter,
-            header_line: *line,
-            headers: row.clone(),
-            mapping,
-            records,
-            next_table,
-        }));
-    }
-
-    Ok(None)
-}
-
-fn detect_date_order(candidate: &Candidate) -> DateOrder {
-    let samples: Vec<String> = candidate
-        .records
-        .iter()
-        .filter_map(|(_, row)| row.get(candidate.mapping.booked_on).cloned())
-        .collect();
-    dates::detect_order(&samples)
-}
-
-fn build_preview(candidate: Candidate, order: DateOrder) -> StatementPreview {
-    let mut rows = Vec::new();
-    let mut skipped = Vec::new();
-
-    for (line, record) in &candidate.records {
-        let line = *line;
-        let raw_date = record
-            .get(candidate.mapping.booked_on)
-            .cloned()
-            .unwrap_or_default();
-        let Some(booked_on) = dates::parse(&raw_date, order) else {
-            skipped.push(SkippedRow {
-                line,
-                reason: format!("unreadable date `{raw_date}`"),
-            });
-            continue;
-        };
-
-        let amount = match read_amount(record, &candidate.mapping.amount) {
-            Ok(amount) => amount,
-            Err(reason) => {
-                skipped.push(SkippedRow { line, reason });
-                continue;
-            }
-        };
-
-        let description = cell(record, Some(candidate.mapping.description))
-            .filter(|text| !text.is_empty())
-            .unwrap_or_else(|| "(no description)".to_string());
-
-        rows.push(ParsedRow {
-            line,
-            booked_on,
-            value_on: candidate
-                .mapping
-                .value_on
-                .and_then(|index| record.get(index))
-                .and_then(|raw| dates::parse(raw, order)),
-            description,
-            counterparty: cell(record, candidate.mapping.counterparty).filter(|t| !t.is_empty()),
-            amount,
-            fee: cell(record, candidate.mapping.fee)
-                .and_then(|raw| Money::parse_flexible(&raw).ok())
-                .map(Money::abs)
-                .filter(|fee| !fee.is_zero()),
-            balance_after: cell(record, candidate.mapping.balance)
-                .and_then(|raw| Money::parse_flexible(&raw).ok()),
-        });
-    }
-
-    // Que el fichero traiga más tablas no es un error, pero el usuario tiene que
-    // verlo: si no, parecerá que la importación se ha dejado movimientos.
-    if let Some(line) = candidate.next_table {
-        skipped.push(SkippedRow {
-            line,
-            reason: "another table starts here; only the first one is imported".to_string(),
-        });
-    }
-
-    let fee_applied = apply_fees_if_the_balance_says_so(&mut rows);
-
-    StatementPreview {
-        delimiter: candidate.delimiter as char,
-        header_line: candidate.header_line,
-        headers: candidate.headers,
-        mapping: candidate.mapping,
-        rows,
-        skipped,
-        fee_applied,
-    }
-}
-
-/// Descuenta la comisión de cada importe, pero solo si el saldo que declara el
-/// extracto confirma que hay que hacerlo.
-///
-/// No todos los bancos usan esa columna igual: unos ya traen la comisión dentro
-/// del importe (restarla la cobraría dos veces) y otros la cobran aparte (no
-/// restarla descuadra el saldo). En vez de adivinarlo por el nombre del banco
-/// se prueban las dos lecturas contra la columna de saldo y gana la que cuadra.
-/// Sin columna de saldo no hay forma de comprobarlo, así que se deja el importe
-/// tal cual: es la única opción que no inventa dinero.
-fn apply_fees_if_the_balance_says_so(rows: &mut [ParsedRow]) -> bool {
-    if rows.iter().all(|row| row.fee.is_none()) {
-        return false;
-    }
-
-    let Some(as_is) = balance_check_of(rows) else {
-        return false;
-    };
-    if as_is.is_consistent() {
-        return false;
-    }
-
-    let with_fees: Vec<ParsedRow> = rows
-        .iter()
-        .map(|row| ParsedRow {
-            amount: row.amount - row.fee.unwrap_or(Money::ZERO),
-            ..row.clone()
-        })
-        .collect();
-
-    let Some(net) = balance_check_of(&with_fees) else {
-        return false;
-    };
-    if net.matched <= as_is.matched {
-        return false;
-    }
-
-    for (row, net_row) in rows.iter_mut().zip(with_fees) {
-        row.amount = net_row.amount;
-    }
-    true
-}
-
-fn read_amount(record: &[String], columns: &AmountColumns) -> Result<Money, String> {
-    match columns {
-        AmountColumns::Single { index } => {
-            let raw = record.get(*index).cloned().unwrap_or_default();
-            Money::parse_flexible(&raw).map_err(|error| error.to_string())
-        }
-        AmountColumns::DebitCredit { debit, credit } => {
-            let raw_debit = record.get(*debit).cloned().unwrap_or_default();
-            let raw_credit = record.get(*credit).cloned().unwrap_or_default();
-
-            // El signo lo decide la columna, no el texto: hay bancos que
-            // escriben el cargo en positivo y otros que lo traen ya en negativo.
-            let credit_value = Money::parse_flexible(&raw_credit).ok().map(Money::abs);
-            let debit_value = Money::parse_flexible(&raw_debit).ok().map(|v| -v.abs());
-
-            match (credit_value, debit_value) {
-                (Some(credit), _) if !credit.is_zero() => Ok(credit),
-                (_, Some(debit)) if !debit.is_zero() => Ok(debit),
-                _ => Err("row has neither debit nor credit amount".to_string()),
-            }
-        }
-    }
-}
-
-fn cell(record: &[String], index: Option<usize>) -> Option<String> {
-    index
-        .and_then(|index| record.get(index))
-        .map(|value| value.trim().to_string())
+    Ok(rows)
 }

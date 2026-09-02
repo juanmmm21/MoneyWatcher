@@ -2,7 +2,9 @@
 //! los formatos reales de la banca española, británica y estadounidense.
 
 use moneywatcher_core::domain::{AccountId, Money};
-use moneywatcher_core::importer::{parse_csv, AmountColumns, ImportError};
+use moneywatcher_core::importer::{
+    parse_csv, parse_statement, AmountColumns, ImportError, StatementSource,
+};
 
 fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(format!(
@@ -16,7 +18,7 @@ fn fixture(name: &str) -> Vec<u8> {
 fn parses_spanish_statement_with_preamble_and_semicolons() {
     let preview = parse_csv(&fixture("bank_es_semicolon.csv")).expect("extracto legible");
 
-    assert_eq!(preview.delimiter, ';');
+    assert_eq!(preview.source, StatementSource::Csv { delimiter: ';' });
     assert_eq!(
         preview.header_line, 5,
         "la cabecera va tras el preámbulo del banco"
@@ -49,7 +51,7 @@ fn parses_spanish_statement_with_preamble_and_semicolons() {
 fn parses_debit_and_credit_columns_into_signed_amounts() {
     let preview = parse_csv(&fixture("bank_uk_debit_credit.csv")).expect("extracto legible");
 
-    assert_eq!(preview.delimiter, ',');
+    assert_eq!(preview.source, StatementSource::Csv { delimiter: ',' });
     assert!(matches!(
         preview.mapping.amount,
         AmountColumns::DebitCredit { .. }
@@ -128,7 +130,7 @@ fn rejects_files_that_are_not_statements() {
 fn parses_an_electronic_banking_report_with_named_months() {
     let preview = parse_csv(&fixture("bank_report_named_months.csv")).expect("informe legible");
 
-    assert_eq!(preview.delimiter, ',');
+    assert_eq!(preview.source, StatementSource::Csv { delimiter: ',' });
     // La cabecera no está en las primeras líneas, sino tras todo el preámbulo.
     assert_eq!(preview.header_line, 21);
     assert_eq!(
@@ -246,4 +248,53 @@ fn fees_are_not_touched_without_a_balance_to_check_against() {
     assert!(!preview.fee_applied);
     assert_eq!(preview.rows[1].amount, Money::from_minor_units(-10_000));
     assert_eq!(preview.rows[1].fee, Some(Money::from_minor_units(200)));
+}
+
+/// Varios bancos españoles solo dejan descargar el extracto en Excel. La hoja
+/// no trae texto: las fechas son fechas de Excel y los importes números, así
+/// que hay que convertirlas antes de que el resto del importador las vea.
+#[test]
+fn reads_a_spreadsheet_with_real_dates_and_numeric_amounts() {
+    let preview = parse_statement(&fixture("bank_es_workbook.xlsx")).expect("libro legible");
+
+    assert_eq!(
+        preview.source,
+        StatementSource::Excel {
+            sheet: "Movimientos".into()
+        },
+        "de un libro con portada y movimientos se elige la hoja con la tabla"
+    );
+    assert_eq!(preview.header_line, 3, "la cabecera va tras el título");
+    assert_eq!(preview.rows.len(), 4);
+
+    let salary = &preview.rows[0];
+    assert_eq!(salary.description, "NOMINA MARZO EMPRESA SL");
+    assert_eq!(salary.booked_on.to_string(), "2026-03-01");
+    assert_eq!(
+        salary.value_on.map(|date| date.to_string()),
+        Some("2026-03-01".to_string())
+    );
+    assert_eq!(salary.amount, Money::from_minor_units(185_000));
+    assert_eq!(salary.balance_after, Some(Money::from_minor_units(215_045)));
+
+    // Un importe con decimales no puede perder céntimos al pasar por la hoja.
+    assert_eq!(preview.rows[1].amount, Money::from_minor_units(-4_512));
+    assert_eq!(preview.rows[2].amount, Money::from_minor_units(-7_290));
+
+    // La fila de totales no tiene fecha y se descarta explicando por qué.
+    assert_eq!(preview.skipped.len(), 1);
+    assert!(preview.skipped[0].reason.contains("Total periodo"));
+
+    assert!(preview
+        .balance_check()
+        .expect("la hoja trae saldos")
+        .is_consistent());
+}
+
+/// El formato se decide por el contenido: un CSV sigue leyéndose como CSV
+/// aunque ahora exista el camino de las hojas de cálculo.
+#[test]
+fn plain_csv_still_goes_through_the_csv_reader() {
+    let preview = parse_statement(&fixture("bank_us_iso.csv")).expect("extracto legible");
+    assert_eq!(preview.source, StatementSource::Csv { delimiter: ',' });
 }

@@ -9,6 +9,7 @@ use moneywatcher_core::domain::{
     Account, AccountId, AccountKind, Category, CategoryId, CategoryKind, Money, NewAccount,
     NewTransaction, Transaction, TransactionSource,
 };
+use moneywatcher_core::importer::StatementSource;
 use moneywatcher_core::storage::TransactionFilter;
 
 fn keys(value: &serde_json::Value) -> Vec<String> {
@@ -154,4 +155,21 @@ fn transaction_filter_reads_the_payload_sent_by_the_frontend() {
         filter.to.map(|date| date.to_string()).as_deref(),
         Some("2026-03-31")
     );
+}
+
+/// La vista previa de la importación se ramifica por `kind`: si la etiqueta no
+/// sale como el frontend la espera, el diálogo deja de decir de dónde ha leído
+/// los movimientos.
+#[test]
+fn statement_source_tags_the_format_the_frontend_expects() {
+    let csv = serde_json::to_value(StatementSource::Csv { delimiter: ';' }).unwrap();
+    assert_eq!(csv["kind"], serde_json::json!("csv"));
+    assert_eq!(csv["delimiter"], serde_json::json!(";"));
+
+    let excel = serde_json::to_value(StatementSource::Excel {
+        sheet: "Movimientos".into(),
+    })
+    .unwrap();
+    assert_eq!(excel["kind"], serde_json::json!("excel"));
+    assert_eq!(excel["sheet"], serde_json::json!("Movimientos"));
 }

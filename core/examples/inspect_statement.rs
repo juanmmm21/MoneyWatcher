@@ -1,13 +1,13 @@
 //! Herramienta de diagnóstico: enseña qué entiende el importador de un fichero
 //! real sin tocar la base de datos ni la interfaz.
 //!
-//! `cargo run -p moneywatcher-core --example inspect_statement -- <ruta.csv>`
+//! `cargo run -p moneywatcher-core --example inspect_statement -- <ruta>`
 
-use moneywatcher_core::importer::parse_csv;
+use moneywatcher_core::importer::{parse_statement, StatementSource};
 
 fn main() {
     let Some(path) = std::env::args().nth(1) else {
-        eprintln!("uso: inspect_statement <ruta.csv>");
+        eprintln!("uso: inspect_statement <ruta del extracto: csv, xlsx o xls>");
         std::process::exit(2);
     };
 
@@ -19,9 +19,16 @@ fn main() {
         }
     };
 
-    match parse_csv(&bytes) {
+    match parse_statement(&bytes) {
         Ok(preview) => {
-            println!("delimitador   : {:?}", preview.delimiter);
+            match &preview.source {
+                StatementSource::Csv { delimiter } => {
+                    println!("formato       : CSV con delimitador {delimiter:?}")
+                }
+                StatementSource::Excel { sheet } => {
+                    println!("formato       : hoja de cálculo, hoja {sheet:?}")
+                }
+            }
             println!("línea cabecera: {}", preview.header_line);
             println!("cabeceras     : {:?}", preview.headers);
             println!("mapeo         : {:?}", preview.mapping);
