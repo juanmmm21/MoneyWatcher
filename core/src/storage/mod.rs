@@ -16,7 +16,7 @@ use rusqlite::Connection;
 
 pub use accounts::CurrencyUsage;
 pub use imports::ImportRecord;
-pub(crate) use transactions::build_where;
+pub(crate) use transactions::{build_where, normalized_currency};
 pub use transactions::{InsertSummary, TransactionFilter};
 pub use widgets::{NewWidget, Widget, WidgetPlacement};
 

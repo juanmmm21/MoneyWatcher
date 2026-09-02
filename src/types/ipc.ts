@@ -150,6 +150,8 @@ export interface CategorySlice {
 
 export interface BankSummary {
   bank: string;
+  /** Divisa de las cuentas de la fila: una entidad da una fila por divisa. */
+  currency: string;
   accounts: number;
   balance: MoneyString;
   income: MoneyString;

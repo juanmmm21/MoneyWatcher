@@ -141,7 +141,7 @@ export function renderWidget(
         />
       );
     case "bank_balances":
-      return <BankBalancesWidget title={widget.title} banks={overview.banks} currency={currency} />;
+      return <BankBalancesWidget title={widget.title} banks={overview.banks} />;
     case "top_counterparties":
       return (
         <TopCounterpartiesWidget
