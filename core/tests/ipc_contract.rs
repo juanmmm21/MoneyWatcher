@@ -4,10 +4,12 @@
 //! al leer y con un error duro al escribir, así que aquí se fija la convención.
 
 use chrono::NaiveDate;
+use moneywatcher_core::analytics::BankSummary;
 use moneywatcher_core::domain::{
     Account, AccountId, AccountKind, Category, CategoryId, CategoryKind, Money, NewAccount,
     NewTransaction, Transaction, TransactionSource,
 };
+use moneywatcher_core::storage::{CurrencyUsage, TransactionFilter};
 
 fn keys(value: &serde_json::Value) -> Vec<String> {
     value
@@ -126,4 +128,47 @@ fn new_account_deserializes_from_the_frontend_payload() {
 
     let account: NewAccount = serde_json::from_value(payload).expect("payload del frontend válido");
     assert_eq!(account.opening_balance, Money::from_minor_units(210_045));
+}
+
+#[test]
+fn currency_aware_aggregates_serialize_in_camel_case() {
+    let summary = serde_json::to_value(BankSummary {
+        bank: "Revolut".into(),
+        currency: "GBP".into(),
+        accounts: 2,
+        balance: Money::from_minor_units(58_500),
+        income: Money::from_minor_units(50_000),
+        expense: Money::from_minor_units(1_500),
+    })
+    .unwrap();
+    assert_camel_case(&summary, "BankSummary");
+    assert_eq!(summary["currency"], serde_json::json!("GBP"));
+
+    let usage = serde_json::to_value(CurrencyUsage {
+        currency: "JPY".into(),
+        accounts: 1,
+        transactions: 43,
+    })
+    .unwrap();
+    assert_camel_case(&usage, "CurrencyUsage");
+}
+
+/// El filtro viaja del frontend al núcleo, y la divisa es lo que impide que una
+/// agregación sume euros con libras: si el campo no se deserializa, el
+/// dashboard vuelve a mezclarlas sin decirlo.
+#[test]
+fn transaction_filter_accepts_the_currency_sent_by_the_frontend() {
+    let payload = serde_json::json!({
+        "accountIds": [],
+        "from": "2026-01-01",
+        "to": "2026-03-31",
+        "currency": "GBP",
+    });
+    let filter: TransactionFilter = serde_json::from_value(payload).expect("filtro válido");
+    assert_eq!(filter.currency.as_deref(), Some("GBP"));
+
+    // El frontend manda `null` mientras no hay elección explícita.
+    let without: TransactionFilter =
+        serde_json::from_value(serde_json::json!({ "currency": null })).expect("filtro válido");
+    assert!(without.currency.is_none());
 }
