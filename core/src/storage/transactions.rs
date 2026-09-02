@@ -25,6 +25,10 @@ pub struct TransactionFilter {
     pub search: Option<String>,
     /// Solo movimientos aún sin categoría, para la bandeja de revisión.
     pub uncategorized_only: bool,
+    /// Deja fuera las dos caras de los traspasos reconocidos entre cuentas
+    /// propias. Lo pone la capa de comandos a partir del ajuste del usuario:
+    /// el frontend no decide qué entra en una suma de dinero.
+    pub exclude_transfers: bool,
     pub limit: Option<u32>,
     pub offset: Option<u32>,
 }
@@ -296,6 +300,16 @@ pub(crate) fn build_where(filter: &TransactionFilter) -> (String, Vec<Value>) {
 
     if filter.uncategorized_only {
         clauses.push("t.category_id IS NULL".to_string());
+    }
+
+    if filter.exclude_transfers {
+        // Sin parámetros a propósito: la cláusula viaja tal cual a las
+        // subconsultas de `bank_summaries`, que reindexa los `?N` que encuentra.
+        clauses.push(
+            "t.id NOT IN (SELECT outgoing_id FROM transfer_links WHERE dismissed = 0)
+             AND t.id NOT IN (SELECT incoming_id FROM transfer_links WHERE dismissed = 0)"
+                .to_string(),
+        );
     }
 
     if let Some(search) = filter
