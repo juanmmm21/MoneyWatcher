@@ -151,7 +151,17 @@ fn split_separators<'a>(cleaned: &'a str, raw: &str) -> Result<(String, &'a str)
                 integer.push_str(tail);
                 Ok((integer, ""))
             } else if tail.len() > SCALE as usize {
-                Err(MoneyParseError::TooManyDecimals(raw.to_string()))
+                // Hay exportaciones (N26, Trade Republic) que rellenan la parte
+                // decimal con ceros hasta seis o nueve cifras: `12.710000000`
+                // es 12,71 exacto y tirar esa fila descuadra el extracto. Un
+                // dígito significativo de más sí sigue siendo un error, porque
+                // la única salida sería redondear, o sea inventarse el importe.
+                let (kept, extra) = tail.split_at(SCALE as usize);
+                if extra.chars().all(|digit| digit == '0') {
+                    Ok((head, kept))
+                } else {
+                    Err(MoneyParseError::TooManyDecimals(raw.to_string()))
+                }
             } else {
                 Ok((head, tail))
             }
@@ -286,6 +296,46 @@ mod tests {
     fn parses_amounts_without_integer_part() {
         assert_eq!(Money::parse_flexible(",50").unwrap().minor_units(), 50);
         assert_eq!(Money::parse_flexible("-.5").unwrap().minor_units(), -50);
+    }
+
+    /// Formato de N26 y de Trade Republic: el importe llega con la parte
+    /// decimal rellena de ceros. Rechazarlo dejaba fuera 158 de 1.674 líneas de
+    /// un extracto real, y con ellas el saldo dejaba de cuadrar.
+    #[test]
+    fn accepts_decimals_padded_with_zeros() {
+        assert_eq!(
+            Money::parse_flexible("12.710000000").unwrap().minor_units(),
+            1_271
+        );
+        assert_eq!(
+            Money::parse_flexible("-170.000000000")
+                .unwrap()
+                .minor_units(),
+            -17_000
+        );
+        assert_eq!(Money::parse_flexible("0.050000").unwrap().minor_units(), 5);
+        assert_eq!(
+            Money::parse_flexible("1234,560000").unwrap().minor_units(),
+            123_456
+        );
+    }
+
+    /// Un céntimo partido no se redondea: redondear es inventarse el importe,
+    /// y el usuario tiene que enterarse de que esa línea no ha entrado.
+    #[test]
+    fn still_rejects_significant_extra_decimals() {
+        assert!(matches!(
+            Money::parse_flexible("12.715000"),
+            Err(MoneyParseError::TooManyDecimals(_))
+        ));
+        assert!(matches!(
+            Money::parse_flexible("1.234567"),
+            Err(MoneyParseError::TooManyDecimals(_))
+        ));
+        assert!(matches!(
+            Money::parse_flexible("0,0001"),
+            Err(MoneyParseError::TooManyDecimals(_))
+        ));
     }
 
     #[test]
