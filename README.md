@@ -202,12 +202,19 @@ the cheapest way to know a new bank's format was read correctly, down to the cen
 ### The optional assistant
 
 Settings → *Asistente de categorización*. Point it at a local [Ollama](https://ollama.com) instance
-(`http://127.0.0.1:11434` by default) and pick a model you have pulled. Model size matters more
-than anything else here: below 4B the answers are not usable, and the example below measures any
-model you have against a fixed set of Spanish bank descriptions before you trust it. The app sends only the
-description, counterparty and amount of the movements no rule could classify — never account names,
-balances or identifiers — and shows the model's proposals for you to accept one by one. If you
-point it at a non-local endpoint, the UI warns you explicitly that data would leave your machine.
+(`http://127.0.0.1:11434` by default) and pick a model you have pulled:
+
+```bash
+ollama pull phi4          # the default: slowest of the three, and the one that is wrong least often
+ollama pull gemma3        # a third of the size and three times faster, a couple of hits behind
+```
+
+Model size matters more than anything else here — below 4B the answers are not usable — and the
+benchmark below measures any model you have against a fixed set of Spanish bank descriptions before
+you trust it. The app sends only the description, counterparty and amount of the movements no rule
+could classify — never account names, balances or identifiers — and shows the model's proposals for
+you to accept one by one. If you point it at a non-local endpoint, the UI warns you explicitly that
+data would leave your machine.
 
 ## Using the core as a library
 

@@ -21,13 +21,18 @@ pub const SETTINGS_KEY: &str = "ai.provider";
 pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 /// Modelo por defecto.
 ///
-/// Medido sobre 30 conceptos de banca española: `llama3.2` (3B) ni siquiera
-/// devolvía una lista utilizable con un lote de 25 movimientos, y cuando
-/// respondía lo mandaba casi todo a "Other expense" con confianza 100, que es
-/// peor que no sugerir nada. `qwen2.5:7b` acierta 26 de 30 y distingue de
-/// verdad lo que sabe de lo que no. Un modelo de 14B (`phi4`) llega a 30 de 30
-/// si la máquina da para ello.
-pub const DEFAULT_OLLAMA_MODEL: &str = "qwen2.5:7b";
+/// Medido con `examples/benchmark_assistant.rs` sobre 35 conceptos de banca
+/// española, en lotes de 25 como los que manda la app y con tres tiradas de
+/// resultado idéntico: `phi4` (14B) acierta 33, `gemma3` (4B) 31 y
+/// `qwen2.5:7b` 30; `llama3.2` (3B) ni siquiera responde al lote.
+///
+/// Lo que decide no es el recuento de aciertos sino cuántos fallos vienen con
+/// confianza alta, porque son los que el usuario acepta en bloque sin mirar:
+/// `phi4` tiene uno y los otros dos tienen cuatro. Cuesta el doble de tiempo
+/// (~100 s por lote frente a ~30 s) y 9 GB de descarga, y sale a cuenta: pedir
+/// sugerencias no es una operación interactiva, aceptar una equivocada sí
+/// ensucia el histórico y además enseña una regla mala.
+pub const DEFAULT_OLLAMA_MODEL: &str = "phi4:latest";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
