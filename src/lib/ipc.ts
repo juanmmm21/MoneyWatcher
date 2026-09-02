@@ -24,6 +24,8 @@ import type {
   Transaction,
   TransactionFilter,
   TransactionPage,
+  TransferDetection,
+  TransferSettings,
   Widget,
   WidgetPlacement,
 } from "../types/ipc";
@@ -103,6 +105,13 @@ export const api = {
   deleteWidget: (widgetId: number) => invoke<void>("delete_widget", { widgetId }),
   saveWidgetLayout: (layout: (WidgetPlacement & { id: number })[]) =>
     invoke<void>("save_widget_layout", { layout }),
+
+  transferSettings: () => invoke<TransferSettings>("transfer_settings"),
+  setTransferDetection: (enabled: boolean) =>
+    invoke<TransferDetection>("set_transfer_detection", { enabled }),
+  detectTransfers: () => invoke<TransferDetection>("detect_transfers"),
+  setTransferDismissed: (linkId: number, dismissed: boolean) =>
+    invoke<void>("set_transfer_dismissed", { linkId, dismissed }),
 
   assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
   setAssistantSettings: (provider: AiProvider) =>

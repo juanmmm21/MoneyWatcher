@@ -56,7 +56,6 @@ pub fn run() {
             commands::transfers::transfer_settings,
             commands::transfers::set_transfer_detection,
             commands::transfers::detect_transfers,
-            commands::transfers::list_transfers,
             commands::transfers::set_transfer_dismissed,
             commands::assistant::assistant_settings,
             commands::assistant::set_assistant_settings,

@@ -67,12 +67,51 @@ export interface TransactionFilter {
   uncategorizedOnly?: boolean;
   limit?: number | null;
   offset?: number | null;
+  /**
+   * Deja fuera las dos caras de los traspasos reconocidos. Lo fija el núcleo a
+   * partir del ajuste del usuario: las vistas no lo mandan.
+   */
+  excludeTransfers?: boolean;
 }
 
 
 export interface TransactionPage {
   transactions: Transaction[];
   total: number;
+  /** Cuáles de estos movimientos son una de las caras de un traspaso. */
+  transferIds: number[];
+}
+
+/** Los dos movimientos que forman un traspaso entre cuentas propias. */
+export interface TransferLink {
+  id: number;
+  /** El usuario ha dicho que no es un traspaso: vuelve a contar en las sumas. */
+  dismissed: boolean;
+  outgoingId: number;
+  incomingId: number;
+  bookedOn: IsoDate;
+  /** Días entre el cargo y el abono. */
+  dayGap: number;
+  /** Lo movido, en positivo. */
+  amount: MoneyString;
+  fromAccount: string;
+  toAccount: string;
+  outgoingDescription: string;
+  incomingDescription: string;
+}
+
+export interface TransferDetection {
+  /** Pares nuevos encontrados en la última pasada. */
+  linked: number;
+  /** Traspasos reconocidos en total, sin contar los descartados. */
+  active: number;
+}
+
+export interface TransferSettings {
+  enabled: boolean;
+  active: number;
+  windowDays: number;
+  links: TransferLink[];
 }
 
 export interface Rule {
@@ -223,6 +262,8 @@ export interface ImportResult {
   duplicates: number;
   skipped: number;
   categorization: CategorizationSummary;
+  /** `null` si la detección de traspasos está desactivada. */
+  transfers: TransferDetection | null;
 }
 
 export interface WidgetPlacement {

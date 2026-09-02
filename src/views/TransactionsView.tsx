@@ -101,6 +101,12 @@ export function TransactionsView({
     [learnFromCorrections, result],
   );
 
+  // Set para no recorrer la lista de traspasos por cada fila pintada.
+  const transferIds = useMemo(
+    () => new Set(result.data?.transferIds ?? []),
+    [result.data],
+  );
+
   const total = result.data?.total ?? 0;
   const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
@@ -196,7 +202,18 @@ export function TransactionsView({
                 <tr key={transaction.id}>
                   <td className="tabular small">{formatDate(transaction.bookedOn)}</td>
                   <td>
-                    <div>{transaction.description}</div>
+                    <div>
+                      {transaction.description}
+                      {transferIds.has(transaction.id) ? (
+                        <span
+                          className="badge"
+                          title="Emparejado con el movimiento contrario de otra cuenta tuya: no cuenta en los widgets"
+                        >
+                          {" "}
+                          traspaso
+                        </span>
+                      ) : null}
+                    </div>
                     {transaction.counterparty ? (
                       <div className="small muted">{transaction.counterparty}</div>
                     ) : null}

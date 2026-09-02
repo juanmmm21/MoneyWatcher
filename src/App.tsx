@@ -125,6 +125,9 @@ export function App() {
                 {lastImport.categorization.categorized > 0
                   ? `${lastImport.categorization.categorized} categorizados por reglas.`
                   : ""}
+                {lastImport.transfers && lastImport.transfers.linked > 0
+                  ? ` ${lastImport.transfers.linked} traspaso(s) reconocidos entre tus cuentas.`
+                  : ""}
               </span>
               <span className="topbar__spacer" />
               <button

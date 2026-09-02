@@ -3,7 +3,14 @@ import { useCallback, useState } from "react";
 import { AccountDialog } from "../components/AccountDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorMessage } from "../lib/ipc";
-import type { Account, AppInfo, AssistantStatus, ImportRecord } from "../types/ipc";
+import { formatDate, formatMoney } from "../lib/money";
+import type {
+  Account,
+  AppInfo,
+  AssistantStatus,
+  ImportRecord,
+  TransferSettings,
+} from "../types/ipc";
 import { DEFAULT_OLLAMA_ENDPOINT, DEFAULT_OLLAMA_MODEL } from "../lib/constants";
 
 /** Tamaño legible: la base pasa de KB a MB en cuanto se importan unos meses. */
@@ -33,6 +40,7 @@ export function SettingsView({
   const info = useAsync<AppInfo>(() => api.appInfo(), [dataVersion]);
   const imports = useAsync<ImportRecord[]>(() => api.listImports(10), [dataVersion]);
   const assistant = useAsync<AssistantStatus>(() => api.assistantStatus(), []);
+  const transfers = useAsync<TransferSettings>(() => api.transferSettings(), [dataVersion]);
 
   const [creatingAccount, setCreatingAccount] = useState(false);
   // Deshacer una importación borra sus movimientos y no hay vuelta atrás, así
@@ -69,6 +77,66 @@ export function SettingsView({
       }
     },
     [assistant, endpoint, model, onDataChanged],
+  );
+
+  // El resultado de la última detección: cuántos pares nuevos han salido. Sin
+  // este aviso, pulsar «Buscar traspasos» y no encontrar nada parecería que el
+  // botón no ha hecho nada.
+  const [transferNotice, setTransferNotice] = useState<string | null>(null);
+
+  const toggleTransferDetection = useCallback(
+    async (enabled: boolean) => {
+      setError(null);
+      setTransferNotice(null);
+      try {
+        const detection = await api.setTransferDetection(enabled);
+        if (enabled) {
+          setTransferNotice(
+            detection.linked > 0
+              ? `${detection.linked} traspaso(s) nuevos encontrados.`
+              : "Ningún traspaso nuevo entre tus cuentas.",
+          );
+        }
+        transfers.reload();
+        // Los widgets del dashboard suman de otra forma a partir de ahora.
+        onDataChanged();
+      } catch (toggleError) {
+        setError(errorMessage(toggleError));
+      }
+    },
+    [transfers, onDataChanged],
+  );
+
+  const detectTransfers = useCallback(async () => {
+    setError(null);
+    setTransferNotice(null);
+    try {
+      const detection = await api.detectTransfers();
+      setTransferNotice(
+        detection.linked > 0
+          ? `${detection.linked} traspaso(s) nuevos encontrados.`
+          : "Ningún traspaso nuevo entre tus cuentas.",
+      );
+      transfers.reload();
+      onDataChanged();
+    } catch (detectError) {
+      setError(errorMessage(detectError));
+    }
+  }, [transfers, onDataChanged]);
+
+  const dismissTransfer = useCallback(
+    async (linkId: number, dismissed: boolean) => {
+      setError(null);
+      setTransferNotice(null);
+      try {
+        await api.setTransferDismissed(linkId, dismissed);
+        transfers.reload();
+        onDataChanged();
+      } catch (dismissError) {
+        setError(errorMessage(dismissError));
+      }
+    },
+    [transfers, onDataChanged],
   );
 
   const archiveAccount = useCallback(
@@ -246,6 +314,106 @@ export function SettingsView({
               Comprobar conexión
             </button>
           </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <h3 className="card__title">Traspasos entre cuentas</h3>
+          {transfers.data ? (
+            <span className="badge">
+              <span
+                className="badge__dot"
+                style={{
+                  background: transfers.data.enabled ? "var(--income)" : "var(--text-faint)",
+                }}
+              />
+              {transfers.data.enabled
+                ? `${transfers.data.active} reconocidos`
+                : "desactivado"}
+            </span>
+          ) : null}
+        </div>
+        <div className="card__body stack">
+          <p className="small muted" style={{ margin: 0 }}>
+            Mover 300 € de una cuenta tuya a otra no es gastar 300 € y ganar otros 300: es el
+            mismo dinero cambiado de sitio. Con esto activado, los pares que la app reconoce
+            (mismo importe, signo contrario, cuentas distintas y como mucho{" "}
+            {transfers.data?.windowDays ?? 2} días de diferencia) dejan de contar en los widgets.
+            Siguen apareciendo en la lista de movimientos, marcados como traspaso.
+          </p>
+
+          {transferNotice ? <div className="banner">{transferNotice}</div> : null}
+
+          <div className="row">
+            <button
+              type="button"
+              className="button"
+              onClick={() => void toggleTransferDetection(!(transfers.data?.enabled ?? false))}
+            >
+              {transfers.data?.enabled ? "Desactivar" : "Activar"}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => void detectTransfers()}
+              disabled={!transfers.data?.enabled}
+            >
+              Buscar traspasos ahora
+            </button>
+          </div>
+
+          {(transfers.data?.links.length ?? 0) > 0 ? (
+            <>
+              <p className="small muted" style={{ margin: 0 }}>
+                Revisa los pares: dos importes iguales de signo contrario pueden ser una
+                coincidencia. Lo que descartes aquí vuelve a contar como gasto e ingreso y no
+                se vuelve a proponer.
+              </p>
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th style={{ width: 110 }}>Fecha</th>
+                    <th>De → a</th>
+                    <th className="table__amount" style={{ width: 120 }}>
+                      Importe
+                    </th>
+                    <th style={{ width: 150 }} />
+                  </tr>
+                </thead>
+                <tbody>
+                  {(transfers.data?.links ?? []).map((link) => (
+                    <tr key={link.id} style={{ opacity: link.dismissed ? 0.55 : 1 }}>
+                      <td className="tabular small">
+                        {formatDate(link.bookedOn)}
+                        {link.dayGap > 0 ? (
+                          <div className="small muted">+{link.dayGap} d</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        <div className="small">
+                          {link.fromAccount} → {link.toAccount}
+                        </div>
+                        <div className="small muted">
+                          {link.outgoingDescription} · {link.incomingDescription}
+                        </div>
+                      </td>
+                      <td className="table__amount tabular">{formatMoney(link.amount)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="button button--ghost"
+                          onClick={() => void dismissTransfer(link.id, !link.dismissed)}
+                        >
+                          {link.dismissed ? "Sí es un traspaso" : "No es un traspaso"}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          ) : null}
         </div>
       </div>
 

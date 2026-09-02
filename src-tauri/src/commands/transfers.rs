@@ -64,11 +64,6 @@ pub fn detect_transfers(state: State<'_, AppState>) -> CommandResult<TransferDet
     Ok(transfers::detect_transfers(&mut database)?)
 }
 
-#[tauri::command]
-pub fn list_transfers(state: State<'_, AppState>) -> CommandResult<Vec<TransferLink>> {
-    Ok(state.database()?.transfer_links(TRANSFER_LIST_LIMIT)?)
-}
-
 /// Descarta (o vuelve a reconocer) un par. Un descarte no borra el enlace: es
 /// lo que impide que la siguiente detección proponga otra vez lo mismo.
 #[tauri::command]
