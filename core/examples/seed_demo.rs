@@ -14,8 +14,10 @@ use std::path::{Path, PathBuf};
 
 use chrono::{Datelike, Months, NaiveDate};
 use moneywatcher_core::domain::{
-    AccountId, AccountKind, CategoryId, Money, NewAccount, NewTransaction, TransactionSource,
+    AccountId, AccountKind, CategoryId, ImportId, Money, NewAccount, NewRule, NewTransaction,
+    RuleMatcher, RuleOrigin, TransactionSource,
 };
+use moneywatcher_core::rules::{apply_rules, LEARNED_RULE_PRIORITY, USER_RULE_PRIORITY};
 use moneywatcher_core::storage::Database;
 
 /// Meses de historia que se generan hacia atrás desde el mes en curso.
@@ -67,6 +69,10 @@ struct DemoAccount {
     name: &'static str,
     bank: &'static str,
     kind: AccountKind,
+    /// Nombre del extracto del que «vienen» sus movimientos: la demo registra
+    /// la importación para que la app cuente la misma historia que contaría
+    /// con extractos de verdad.
+    statement: &'static str,
 }
 
 const ACCOUNTS: [DemoAccount; 3] = [
@@ -74,16 +80,19 @@ const ACCOUNTS: [DemoAccount; 3] = [
         name: "Cuenta corriente",
         bank: "Banco Iberia",
         kind: AccountKind::Checking,
+        statement: "banco-iberia-corriente.csv",
     },
     DemoAccount {
         name: "Ahorro",
         bank: "Norte Digital",
         kind: AccountKind::Savings,
+        statement: "norte-digital-ahorro.csv",
     },
     DemoAccount {
         name: "Tarjeta",
         bank: "Caja Levante",
         kind: AccountKind::Credit,
+        statement: "caja-levante-tarjeta.xlsx",
     },
 ];
 
@@ -279,6 +288,44 @@ const OCCASIONAL: [Occasional; 8] = [
     },
 ];
 
+/// Regla de categorización que la demo trae ya creada.
+struct DemoRule {
+    pattern: &'static str,
+    category: &'static str,
+    origin: RuleOrigin,
+}
+
+/// Las reglas no se inventan sus aciertos: los movimientos que casan con estos
+/// patrones entran sin categoría y es el motor de reglas de verdad el que los
+/// clasifica, así que el contador de la interfaz enseña trabajo real.
+const RULES: [DemoRule; 5] = [
+    DemoRule {
+        pattern: "NOMINA",
+        category: "Nómina",
+        origin: RuleOrigin::User,
+    },
+    DemoRule {
+        pattern: "STREAMFLIX",
+        category: "Suscripciones",
+        origin: RuleOrigin::User,
+    },
+    DemoRule {
+        pattern: "SUPERMERCADO LA HUERTA",
+        category: "Supermercado",
+        origin: RuleOrigin::Learned,
+    },
+    DemoRule {
+        pattern: "GASOLINERA",
+        category: "Transporte",
+        origin: RuleOrigin::Learned,
+    },
+    DemoRule {
+        pattern: "TABERNA DEL PUERTO",
+        category: "Restaurantes",
+        origin: RuleOrigin::Assistant,
+    },
+];
+
 /// Traspaso mensual de la cuenta corriente a la de ahorro. Se genera como dos
 /// movimientos con el mismo importe y signo opuesto, que es exactamente lo que
 /// aparecería en los dos extractos.
@@ -311,26 +358,91 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::create_dir_all(&directory)?;
 
     let mut database = Database::open(&path)?;
-    let accounts = create_accounts(&database)?;
+    let ledger = create_accounts(&database)?;
     let categories = category_index(&database)?;
-    let transactions = generate(&accounts, &categories)?;
+    create_rules(&database, &categories)?;
+    let transactions = generate(&ledger, &categories)?;
     let summary = database.insert_transactions(&transactions)?;
+    close_imports(&database, &ledger, &transactions)?;
+    let categorization = apply_rules(&mut database)?;
 
-    report(&path, &transactions, summary.inserted);
+    report(&path, &transactions, summary.inserted, categorization.pending);
     Ok(())
 }
 
-fn create_accounts(database: &Database) -> Result<Vec<AccountId>, Box<dyn std::error::Error>> {
-    let mut ids = Vec::with_capacity(ACCOUNTS.len());
+/// Cuentas de la demo con la importación que las alimenta.
+struct Ledger {
+    accounts: Vec<AccountId>,
+    imports: Vec<ImportId>,
+}
+
+/// Cierra cada importación con el número de movimientos que le corresponde, que
+/// es lo que la pantalla de ajustes enseña como importaciones recientes.
+fn close_imports(
+    database: &Database,
+    ledger: &Ledger,
+    transactions: &[NewTransaction],
+) -> Result<(), Box<dyn std::error::Error>> {
+    for (index, import_id) in ledger.imports.iter().enumerate() {
+        let account_id = ledger.accounts[index];
+        let count = transactions
+            .iter()
+            .filter(|transaction| transaction.account_id == account_id)
+            .count();
+        database.finish_import(*import_id, count, 0)?;
+    }
+    Ok(())
+}
+
+fn create_rules(
+    database: &Database,
+    categories: &HashMap<String, CategoryId>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for rule in &RULES {
+        database.create_rule(&NewRule {
+            matcher: RuleMatcher::Contains,
+            pattern: rule.pattern.to_string(),
+            account_id: None,
+            direction: None,
+            min_amount: None,
+            max_amount: None,
+            category_id: category(categories, rule.category)?,
+            priority: match rule.origin {
+                RuleOrigin::User => USER_RULE_PRIORITY,
+                _ => LEARNED_RULE_PRIORITY,
+            },
+            origin: rule.origin,
+        })?;
+    }
+    Ok(())
+}
+
+/// Un movimiento que casa con una regla entra sin categoría, para que sea la
+/// regla la que lo clasifique.
+fn covered_by_a_rule(description: &str) -> bool {
+    RULES
+        .iter()
+        .any(|rule| description.to_uppercase().contains(rule.pattern))
+}
+
+fn create_accounts(database: &Database) -> Result<Ledger, Box<dyn std::error::Error>> {
+    let mut ledger = Ledger {
+        accounts: Vec::with_capacity(ACCOUNTS.len()),
+        imports: Vec::with_capacity(ACCOUNTS.len()),
+    };
+
     for account in &ACCOUNTS {
         let created = database.create_account(&NewAccount {
             name: account.name.to_string(),
             bank: account.bank.to_string(),
             kind: account.kind,
         })?;
-        ids.push(created.id);
+        let import_id = database.create_import(created.id, account.statement)?;
+        ledger.accounts.push(created.id);
+        ledger.imports.push(import_id);
     }
-    Ok(ids)
+
+    Ok(ledger)
 }
 
 fn category_index(
@@ -369,7 +481,7 @@ fn day_in_month(month: NaiveDate, day: u32) -> Option<NaiveDate> {
 }
 
 fn generate(
-    accounts: &[AccountId],
+    ledger: &Ledger,
     categories: &HashMap<String, CategoryId>,
 ) -> Result<Vec<NewTransaction>, Box<dyn std::error::Error>> {
     let today = chrono::Local::now().date_naive();
@@ -391,7 +503,8 @@ fn generate(
             }
             let amount = entry.cents + rng.between(-entry.jitter, entry.jitter);
             transactions.push(new_transaction(
-                accounts[entry.account],
+                ledger,
+                entry.account,
                 date,
                 entry.description,
                 entry.counterparty,
@@ -414,7 +527,8 @@ fn generate(
                     entry.descriptions[(rng.next_u64() as usize) % entry.descriptions.len()];
                 let amount = rng.between(entry.cents.0, entry.cents.1);
                 transactions.push(new_transaction(
-                    accounts[entry.account],
+                    ledger,
+                    entry.account,
                     date,
                     description,
                     counterparty,
@@ -428,7 +542,8 @@ fn generate(
             if date <= today {
                 let transfer = category(categories, "Traspaso")?;
                 transactions.push(new_transaction(
-                    accounts[0],
+                    ledger,
+                    0,
                     date,
                     "TRASPASO A CUENTA DE AHORRO",
                     "Norte Digital",
@@ -436,7 +551,8 @@ fn generate(
                     transfer,
                 ));
                 transactions.push(new_transaction(
-                    accounts[1],
+                    ledger,
+                    1,
                     date,
                     "TRASPASO DESDE CUENTA CORRIENTE",
                     "Banco Iberia",
@@ -454,7 +570,8 @@ fn generate(
                 if date <= today {
                     let amount = rng.between(600, 1_500);
                     transactions.push(new_transaction(
-                        accounts[0],
+                        ledger,
+                        0,
                         date,
                         "COMISION MANTENIMIENTO CUENTA",
                         "Banco Iberia",
@@ -473,7 +590,8 @@ fn generate(
 /// Los movimientos de la demo no llevan `balance_after`: la app registra
 /// movimientos y ese campo solo existe para contrastar lo que trae un extracto.
 fn new_transaction(
-    account_id: AccountId,
+    ledger: &Ledger,
+    account: usize,
     booked_on: NaiveDate,
     description: &str,
     counterparty: &str,
@@ -481,21 +599,25 @@ fn new_transaction(
     category_id: CategoryId,
 ) -> NewTransaction {
     NewTransaction {
-        account_id,
+        account_id: ledger.accounts[account],
         booked_on,
         value_on: None,
         description: description.to_string(),
         counterparty: Some(counterparty.to_string()),
         amount,
         balance_after: None,
-        category_id: Some(category_id),
+        category_id: if covered_by_a_rule(description) {
+            None
+        } else {
+            Some(category_id)
+        },
         notes: None,
-        source: TransactionSource::Manual,
-        import_id: None,
+        source: TransactionSource::Imported,
+        import_id: Some(ledger.imports[account]),
     }
 }
 
-fn report(path: &Path, transactions: &[NewTransaction], inserted: usize) {
+fn report(path: &Path, transactions: &[NewTransaction], inserted: usize, pending: usize) {
     let income: i64 = transactions
         .iter()
         .map(|transaction| transaction.amount.minor_units())
@@ -509,7 +631,9 @@ fn report(path: &Path, transactions: &[NewTransaction], inserted: usize) {
 
     println!("base de datos : {}", path.display());
     println!("cuentas       : {}", ACCOUNTS.len());
+    println!("reglas        : {}", RULES.len());
     println!("movimientos   : {inserted}");
+    println!("sin categoría : {pending}");
     if let (Some(first), Some(last)) = (transactions.first(), transactions.last()) {
         println!("periodo       : {} → {}", first.booked_on, last.booked_on);
     }
