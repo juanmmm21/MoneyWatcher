@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import GridLayout, { type Layout, WidthProvider } from "react-grid-layout";
 
 import { useAsync } from "../hooks/useAsync";
+import { loadOrSeedWidgets, type WidgetStore } from "../lib/dashboard";
 import { api, errorMessage } from "../lib/ipc";
 import type { DashboardOverview, TransactionFilter, Widget } from "../types/ipc";
 import { DEFAULT_LAYOUT, WIDGET_CATALOG, renderWidget, widgetDefinition } from "../widgets/registry";
 
 const ResponsiveGrid = WidthProvider(GridLayout);
+const WIDGET_STORE: WidgetStore = {
+  list: () => api.listWidgets(),
+  create: (widget) => api.createWidget(widget),
+};
 const GRID_COLUMNS = 12;
 const ROW_HEIGHT = 44;
 
@@ -34,19 +39,9 @@ export function DashboardView({ filter, dataVersion, onReviewPending }: Dashboar
 
   const loadWidgets = useCallback(async () => {
     try {
-      const stored = await api.listWidgets();
-      if (stored.length > 0) {
-        setWidgets(stored);
-        return;
-      }
-
       // Primer arranque: se siembra un dashboard con sentido en vez de dejar
       // al usuario delante de un lienzo vacío.
-      const created: Widget[] = [];
-      for (const widget of DEFAULT_LAYOUT) {
-        created.push(await api.createWidget(widget));
-      }
-      setWidgets(created);
+      setWidgets(await loadOrSeedWidgets(WIDGET_STORE, DEFAULT_LAYOUT));
     } catch (error) {
       setWidgetsError(errorMessage(error));
     }
