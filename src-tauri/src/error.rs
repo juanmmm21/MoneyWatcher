@@ -51,7 +51,7 @@ impl From<ImportError> for CommandError {
             ImportError::Empty => "import_empty",
             ImportError::HeaderNotFound => "import_header_not_found",
             ImportError::NoValidRows => "import_no_rows",
-            ImportError::Csv(_) => "import_malformed",
+            ImportError::Csv(_) | ImportError::Excel(_) => "import_malformed",
         };
         CommandError::new(code, error.to_string())
     }

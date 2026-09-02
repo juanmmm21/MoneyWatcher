@@ -30,7 +30,9 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
     try {
       const selected = await open({
         multiple: false,
-        filters: [{ name: "Extractos", extensions: ["csv", "txt", "tsv"] }],
+        filters: [
+          { name: "Extractos", extensions: ["csv", "txt", "tsv", "xlsx", "xls", "ods"] },
+        ],
       });
       if (typeof selected !== "string") return;
 
@@ -96,7 +98,7 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
               onClick={() => void chooseFile()}
               disabled={busy || accounts.length === 0}
             >
-              {path ? "Elegir otro fichero" : "Elegir fichero CSV…"}
+              {path ? "Elegir otro fichero" : "Elegir extracto…"}
             </button>
           </div>
 
@@ -106,7 +108,11 @@ export function ImportDialog({ accounts, onClose, onImported }: ImportDialogProp
           {preview ? (
             <>
               <div className="row row--wrap small muted">
-                <span className="badge">Separador «{preview.delimiter}»</span>
+                <span className="badge">
+                  {preview.source.kind === "csv"
+                    ? `Separador «${preview.source.delimiter}»`
+                    : `Hoja «${preview.source.sheet}»`}
+                </span>
                 <span className="badge">{preview.rows.length} movimientos</span>
                 {preview.skipped.length > 0 ? (
                   <span className="badge">{preview.skipped.length} líneas descartadas</span>

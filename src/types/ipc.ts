@@ -191,8 +191,13 @@ export interface SkippedRow {
   reason: string;
 }
 
+/** De dónde salieron las celdas del extracto: un CSV o una hoja de cálculo. */
+export type StatementSource =
+  | { kind: "csv"; delimiter: string }
+  | { kind: "excel"; sheet: string };
+
 export interface StatementPreview {
-  delimiter: string;
+  source: StatementSource;
   headerLine: number;
   headers: string[];
   mapping: ColumnMapping;

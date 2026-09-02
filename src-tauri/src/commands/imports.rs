@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use moneywatcher_core::domain::AccountId;
-use moneywatcher_core::importer::{parse_csv, StatementPreview};
+use moneywatcher_core::importer::{parse_statement, StatementPreview};
 use moneywatcher_core::rules::{apply_rules, CategorizationSummary};
 use moneywatcher_core::storage::ImportRecord;
 use serde::Serialize;
@@ -30,7 +30,7 @@ pub struct ImportResult {
 #[tauri::command]
 pub fn preview_statement(path: String) -> CommandResult<StatementPreview> {
     let bytes = read_statement(&path)?;
-    Ok(parse_csv(&bytes)?)
+    Ok(parse_statement(&bytes)?)
 }
 
 /// Importa el extracto en una cuenta y aplica las reglas a lo recién traído.
@@ -41,12 +41,12 @@ pub fn import_statement(
     path: String,
 ) -> CommandResult<ImportResult> {
     let bytes = read_statement(&path)?;
-    let preview = parse_csv(&bytes)?;
+    let preview = parse_statement(&bytes)?;
 
     let source_name = PathBuf::from(&path)
         .file_name()
         .map(|name| name.to_string_lossy().to_string())
-        .unwrap_or_else(|| "statement.csv".to_string());
+        .unwrap_or_else(|| "statement".to_string());
 
     let mut database = state.database()?;
     // La cuenta se comprueba antes de crear el registro de importación para no
