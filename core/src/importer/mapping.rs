@@ -80,7 +80,8 @@ const DEBIT: &[&str] = &[
 const CREDIT: &[&str] = &[
     "abono", "haber", "credit", "entrada", "deposit", "paid in", "ingresos",
 ];
-const BALANCE: &[&str] = &["saldo", "balance", "saldo posterior"];
+// «Disponible» es como BBVA llama al saldo que queda tras el movimiento.
+const BALANCE: &[&str] = &["saldo", "balance", "saldo posterior", "disponible"];
 /// Comisiones cobradas aparte del importe. Se buscan después de la columna de
 /// importe para no quedarse con ella en un extracto que solo liste comisiones.
 const FEE: &[&str] = &["comision", "comisiones", "fee", "fees"];
@@ -233,6 +234,28 @@ mod tests {
         assert_eq!(mapping.amount, AmountColumns::Single { index: 5 });
         assert_eq!(mapping.fee, Some(6));
         assert_eq!(mapping.balance, Some(9));
+    }
+
+    /// Cabecera del informe de BBVA: al saldo lo llama «Disponible».
+    #[test]
+    fn maps_the_available_balance_column_of_bbva() {
+        let mapping = detect(&headers(&[
+            "F.Valor",
+            "Fecha",
+            "Concepto",
+            "Movimiento",
+            "Importe",
+            "Divisa",
+            "Disponible",
+            "Divisa",
+            "Observaciones",
+        ]))
+        .expect("mapeo detectado");
+
+        assert_eq!(mapping.booked_on, 1);
+        assert_eq!(mapping.value_on, Some(0));
+        assert_eq!(mapping.amount, AmountColumns::Single { index: 4 });
+        assert_eq!(mapping.balance, Some(6));
     }
 
     #[test]
