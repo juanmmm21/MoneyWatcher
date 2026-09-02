@@ -43,6 +43,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         "drop_account_currency",
         include_str!("../../migrations/0004_drop_account_currency.sql"),
     ),
+    (
+        5,
+        "drop_opening_balance",
+        include_str!("../../migrations/0005_drop_opening_balance.sql"),
+    ),
 ];
 
 #[derive(Debug, thiserror::Error)]

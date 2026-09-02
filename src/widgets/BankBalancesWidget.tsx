@@ -9,8 +9,11 @@ interface BankBalancesWidgetProps {
 }
 
 /**
- * Saldo y flujo por entidad. Es la vista que refleja cómo está organizado el
- * dinero de verdad: una lista de ingresos y otra de gastos por banco.
+ * Ingresos y gastos del periodo por entidad. Es la vista que refleja cómo está
+ * organizado el dinero de verdad: una lista por banco.
+ *
+ * «Balance» es lo movido en el periodo, no el saldo de la cuenta: la app no
+ * sabe cuánto dinero hay en el banco.
  */
 export function BankBalancesWidget({ title, banks }: BankBalancesWidgetProps) {
   if (banks.length === 0) {
@@ -29,7 +32,7 @@ export function BankBalancesWidget({ title, banks }: BankBalancesWidgetProps) {
             <th>Banco</th>
             <th className="table__amount">Ingresos</th>
             <th className="table__amount">Gastos</th>
-            <th className="table__amount">Saldo</th>
+            <th className="table__amount">Balance</th>
           </tr>
         </thead>
         <tbody>
@@ -47,7 +50,7 @@ export function BankBalancesWidget({ title, banks }: BankBalancesWidgetProps) {
               <td className="table__amount tabular amount--expense">
                 {formatMoney(bank.expense)}
               </td>
-              <td className="table__amount tabular">{formatMoney(bank.balance)}</td>
+              <td className="table__amount tabular">{formatMoney(bank.net)}</td>
             </tr>
           ))}
         </tbody>

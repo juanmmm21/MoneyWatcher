@@ -1,17 +1,18 @@
-use moneywatcher_core::domain::{Account, AccountId, Money, NewAccount};
+use moneywatcher_core::domain::{Account, AccountId, NewAccount};
 use serde::Serialize;
 use tauri::State;
 
 use crate::error::CommandResult;
 use crate::state::AppState;
 
-/// Cuenta con su saldo ya calculado: el frontend no suma importes por su cuenta.
+/// Cuenta con cuántos movimientos tiene dentro. No lleva saldo: MoneyWatcher
+/// registra movimientos y no sabe cuánto dinero hay en el banco.
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AccountView {
     #[serde(flatten)]
     pub account: Account,
-    pub balance: Money,
+    pub transactions: i64,
 }
 
 #[tauri::command]
@@ -24,8 +25,11 @@ pub fn list_accounts(
 
     let mut views = Vec::with_capacity(accounts.len());
     for account in accounts {
-        let balance = database.account_balance(account.id)?;
-        views.push(AccountView { account, balance });
+        let transactions = database.account_transaction_count(account.id)?;
+        views.push(AccountView {
+            account,
+            transactions,
+        });
     }
     Ok(views)
 }
@@ -37,10 +41,10 @@ pub fn create_account(
 ) -> CommandResult<AccountView> {
     let database = state.database()?;
     let created = database.create_account(&account)?;
-    let balance = database.account_balance(created.id)?;
+    let transactions = database.account_transaction_count(created.id)?;
     Ok(AccountView {
         account: created,
-        balance,
+        transactions,
     })
 }
 
@@ -53,8 +57,11 @@ pub fn rename_account(
 ) -> CommandResult<AccountView> {
     let database = state.database()?;
     let account = database.rename_account(account_id, &name, &bank)?;
-    let balance = database.account_balance(account.id)?;
-    Ok(AccountView { account, balance })
+    let transactions = database.account_transaction_count(account.id)?;
+    Ok(AccountView {
+        account,
+        transactions,
+    })
 }
 
 #[tauri::command]
@@ -65,8 +72,11 @@ pub fn set_account_archived(
 ) -> CommandResult<AccountView> {
     let database = state.database()?;
     let account = database.set_account_archived(account_id, archived)?;
-    let balance = database.account_balance(account.id)?;
-    Ok(AccountView { account, balance })
+    let transactions = database.account_transaction_count(account.id)?;
+    Ok(AccountView {
+        account,
+        transactions,
+    })
 }
 
 /// Borra la cuenta con todos sus movimientos. La confirmación es cosa de la

@@ -1,6 +1,6 @@
 use rusqlite::{params, Row};
 
-use crate::domain::{Account, AccountId, AccountKind, Money, NewAccount};
+use crate::domain::{Account, AccountId, AccountKind, NewAccount};
 
 use super::{Database, StorageError, StorageResult};
 
@@ -8,13 +8,12 @@ impl Database {
     pub fn create_account(&self, account: &NewAccount) -> StorageResult<Account> {
         let conn = self.connection();
         conn.execute(
-            "INSERT INTO accounts (name, bank, kind, opening_balance, archived, created_at)
-             VALUES (?1, ?2, ?3, ?4, 0, ?5)",
+            "INSERT INTO accounts (name, bank, kind, archived, created_at)
+             VALUES (?1, ?2, ?3, 0, ?4)",
             params![
                 account.name.trim(),
                 account.bank.trim(),
                 account.kind.as_str(),
-                account.opening_balance.minor_units(),
                 chrono::Utc::now().to_rfc3339(),
             ],
         )?;
@@ -25,7 +24,7 @@ impl Database {
     pub fn account(&self, id: AccountId) -> StorageResult<Account> {
         self.connection()
             .query_row(
-                "SELECT id, name, bank, kind, opening_balance, archived
+                "SELECT id, name, bank, kind, archived
                  FROM accounts WHERE id = ?1",
                 params![id.value()],
                 map_account,
@@ -41,7 +40,7 @@ impl Database {
 
     pub fn accounts(&self, include_archived: bool) -> StorageResult<Vec<Account>> {
         let mut statement = self.connection().prepare(
-            "SELECT id, name, bank, kind, opening_balance, archived
+            "SELECT id, name, bank, kind, archived
              FROM accounts
              WHERE (?1 = 1 OR archived = 0)
              ORDER BY bank COLLATE NOCASE, name COLLATE NOCASE",
@@ -97,15 +96,15 @@ impl Database {
         Ok(())
     }
 
-    /// Saldo actual: apertura más todo lo movido en la cuenta.
-    pub fn account_balance(&self, id: AccountId) -> StorageResult<Money> {
-        let account = self.account(id)?;
-        let movements: i64 = self.connection().query_row(
-            "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE account_id = ?1",
+    /// Cuántos movimientos tiene la cuenta. Es lo que sustituye al saldo en la
+    /// lista de cuentas: dice si una cuenta tiene datos dentro sin afirmar
+    /// nada sobre el dinero que hay en el banco.
+    pub fn account_transaction_count(&self, id: AccountId) -> StorageResult<i64> {
+        Ok(self.connection().query_row(
+            "SELECT COUNT(*) FROM transactions WHERE account_id = ?1",
             params![id.value()],
             |row| row.get(0),
-        )?;
-        Ok(account.opening_balance + Money::from_minor_units(movements))
+        )?)
     }
 }
 
@@ -126,14 +125,13 @@ fn map_account(row: &Row<'_>) -> rusqlite::Result<StorageResult<Account>> {
         name: row.get(1)?,
         bank: row.get(2)?,
         kind,
-        opening_balance: Money::from_minor_units(row.get(4)?),
-        archived: row.get::<_, i64>(5)? != 0,
+        archived: row.get::<_, i64>(4)? != 0,
     }))
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::domain::{AccountKind, Money, NewAccount};
+    use crate::domain::{AccountKind, NewAccount};
     use crate::storage::Database;
 
     fn sample(bank: &str, name: &str) -> NewAccount {
@@ -141,7 +139,6 @@ mod tests {
             name: name.into(),
             bank: bank.into(),
             kind: AccountKind::Checking,
-            opening_balance: Money::from_minor_units(100_000),
         }
     }
 
@@ -174,12 +171,9 @@ mod tests {
     }
 
     #[test]
-    fn balance_starts_at_opening_balance() {
+    fn a_new_account_has_no_transactions() {
         let db = Database::open_in_memory().unwrap();
         let account = db.create_account(&sample("Santander", "Main")).unwrap();
-        assert_eq!(
-            db.account_balance(account.id).unwrap(),
-            Money::from_minor_units(100_000)
-        );
+        assert_eq!(db.account_transaction_count(account.id).unwrap(), 0);
     }
 }

@@ -48,14 +48,17 @@ pub struct CategorySlice {
 
 /// Resumen por banco: es la vista que el usuario tiene en la cabeza cuando
 /// organiza su dinero (una lista de ingresos y otra de gastos por entidad).
+///
+/// `net` es lo que ha entrado menos lo que ha salido **en el periodo mirado**,
+/// no un saldo: la app no sabe cuánto dinero hay en el banco y no lo finge.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BankSummary {
     pub bank: String,
     pub accounts: i64,
-    pub balance: Money,
     pub income: Money,
     pub expense: Money,
+    pub net: Money,
 }
 
 /// Comercio o contraparte recurrente, ordenado por gasto acumulado.
@@ -178,11 +181,11 @@ impl Database {
         Ok(slices)
     }
 
-    /// Balance y flujo agrupados por entidad bancaria.
+    /// Ingresos y gastos del periodo agrupados por entidad bancaria.
     pub fn bank_summaries(&self, filter: &TransactionFilter) -> StorageResult<Vec<BankSummary>> {
         let (where_clause, mut values) = build_where(filter);
-        // El balance incluye el saldo de apertura de cada cuenta, así que se
-        // calcula sobre todos los movimientos y no solo sobre los del filtro.
+        // El mismo filtro se usa dos veces, una por subconsulta, así que los
+        // valores van duplicados y la segunda copia lleva sus `?N` desplazados.
         // Solo se sustituye el primer `WHERE`, el que abre la cláusula: los que
         // vengan dentro de una subconsulta del filtro tienen que sobrevivir.
         let flow_clause = where_clause.replacen(" WHERE ", " AND ", 1);
@@ -196,11 +199,6 @@ impl Database {
             "SELECT
                  a.bank,
                  COUNT(DISTINCT a.id),
-                 COALESCE(SUM(a.opening_balance), 0) + COALESCE((
-                     SELECT SUM(t.amount) FROM transactions t
-                     JOIN accounts inner_a ON inner_a.id = t.account_id
-                     WHERE inner_a.bank = a.bank
-                 ), 0),
                  COALESCE((
                      SELECT SUM(CASE WHEN t.amount > 0 THEN t.amount ELSE 0 END)
                      FROM transactions t
@@ -221,12 +219,14 @@ impl Database {
 
         let mut statement = self.connection().prepare(&sql)?;
         let rows = statement.query_map(params_from_iter(values.iter()), |row| {
+            let income: i64 = row.get(2)?;
+            let expense: i64 = row.get(3)?;
             Ok(BankSummary {
                 bank: row.get(0)?,
                 accounts: row.get(1)?,
-                balance: Money::from_minor_units(row.get(2)?),
-                income: Money::from_minor_units(row.get(3)?),
-                expense: Money::from_minor_units(row.get(4)?),
+                income: Money::from_minor_units(income),
+                expense: Money::from_minor_units(expense),
+                net: Money::from_minor_units(income - expense),
             })
         })?;
 

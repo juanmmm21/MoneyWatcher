@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::{AccountId, Money};
+use super::AccountId;
 
-/// Naturaleza de la cuenta. Determina cómo se interpreta su balance: en una
-/// tarjeta de crédito un saldo negativo es deuda pendiente, no un descubierto.
+/// Naturaleza de la cuenta. Es una etiqueta para agrupar y filtrar: la app
+/// registra movimientos, no saldos, así que no cambia ningún cálculo.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AccountKind {
@@ -50,7 +50,6 @@ pub struct Account {
     pub name: String,
     pub bank: String,
     pub kind: AccountKind,
-    pub opening_balance: Money,
     pub archived: bool,
 }
 
@@ -60,5 +59,4 @@ pub struct NewAccount {
     pub name: String,
     pub bank: String,
     pub kind: AccountKind,
-    pub opening_balance: Money,
 }

@@ -42,7 +42,6 @@ fn seeded_database() -> (Database, AccountId, AccountId) {
             name: "Nómina".into(),
             bank: "Santander".into(),
             kind: AccountKind::Checking,
-            opening_balance: Money::from_minor_units(100_000),
         })
         .unwrap();
 
@@ -51,7 +50,6 @@ fn seeded_database() -> (Database, AccountId, AccountId) {
             name: "Ahorro".into(),
             bank: "BBVA".into(),
             kind: AccountKind::Savings,
-            opening_balance: Money::from_minor_units(500_000),
         })
         .unwrap();
 
@@ -182,8 +180,10 @@ fn category_breakdown_groups_uncategorized_movements_instead_of_hiding_them() {
     );
 }
 
+/// El resumen por bancos cuenta lo movido en el periodo pedido, no un saldo:
+/// la app no sabe cuánto dinero hay en la cuenta y no se lo inventa.
 #[test]
-fn bank_summaries_include_opening_balance_and_period_flow() {
+fn bank_summaries_only_count_the_period_asked_for() {
     let (database, _, _) = seeded_database();
     let summaries = database
         .bank_summaries(&TransactionFilter {
@@ -197,16 +197,14 @@ fn bank_summaries_include_opening_balance_and_period_flow() {
 
     let bbva = &summaries[0];
     assert_eq!(bbva.bank, "BBVA");
-    assert_eq!(bbva.balance, Money::from_minor_units(550_000));
     assert_eq!(bbva.income, Money::from_minor_units(50_000));
+    assert_eq!(bbva.net, Money::from_minor_units(50_000));
 
     let santander = &summaries[1];
     assert_eq!(santander.bank, "Santander");
-    // 1.000,00 de apertura + 5.820,78 de movimientos históricos.
-    assert_eq!(santander.balance, Money::from_minor_units(632_078));
-    // El flujo, en cambio, solo cuenta marzo.
     assert_eq!(santander.income, Money::from_minor_units(185_000));
     assert_eq!(santander.expense, Money::from_minor_units(5_100));
+    assert_eq!(santander.net, Money::from_minor_units(179_900));
 }
 
 #[test]

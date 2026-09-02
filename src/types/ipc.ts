@@ -22,16 +22,15 @@ export interface Account {
   name: string;
   bank: string;
   kind: AccountKind;
-  openingBalance: MoneyString;
   archived: boolean;
-  balance: MoneyString;
+  /** Cuántos movimientos hay guardados en la cuenta. No es un saldo. */
+  transactions: number;
 }
 
 export interface NewAccount {
   name: string;
   bank: string;
   kind: AccountKind;
-  openingBalance: MoneyString;
 }
 
 export interface Category {
@@ -138,9 +137,10 @@ export interface CategorySlice {
 export interface BankSummary {
   bank: string;
   accounts: number;
-  balance: MoneyString;
   income: MoneyString;
   expense: MoneyString;
+  /** Lo movido en el periodo (ingresos − gastos). No es el saldo del banco. */
+  net: MoneyString;
 }
 
 export interface CounterpartyTotal {

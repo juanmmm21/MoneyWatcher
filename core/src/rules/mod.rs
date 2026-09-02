@@ -130,7 +130,6 @@ mod tests {
                 name: "Main".into(),
                 bank: "Santander".into(),
                 kind: AccountKind::Checking,
-                opening_balance: Money::ZERO,
             })
             .unwrap();
 

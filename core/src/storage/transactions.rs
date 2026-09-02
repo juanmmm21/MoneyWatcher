@@ -381,10 +381,22 @@ mod tests {
                 name: "Main".into(),
                 bank: "Santander".into(),
                 kind: AccountKind::Checking,
-                opening_balance: Money::ZERO,
             })
             .unwrap();
         (db, account.id)
+    }
+
+    /// Suma de lo movido en una cuenta. Sustituye al antiguo saldo: la app no
+    /// guarda saldos, pero los tests siguen necesitando comprobar que lo que se
+    /// insertó es exactamente lo que se pidió insertar.
+    fn net(db: &Database, account_id: AccountId) -> i64 {
+        db.flow_totals(&TransactionFilter {
+            account_ids: vec![account_id],
+            ..Default::default()
+        })
+        .unwrap()
+        .net
+        .minor_units()
     }
 
     fn tx(account_id: AccountId, day: u32, description: &str, minor: i64) -> NewTransaction {
@@ -413,10 +425,7 @@ mod tests {
 
         assert_eq!(stored.amount, Money::from_minor_units(-4_512));
         assert_eq!(stored.direction(), Direction::Expense);
-        assert_eq!(
-            db.account_balance(account_id).unwrap().minor_units(),
-            -4_512
-        );
+        assert_eq!(net(&db, account_id), -4_512);
     }
 
     #[test]
@@ -574,7 +583,7 @@ mod tests {
             "las seis compras son movimientos reales"
         );
         assert_eq!(summary.duplicates, 0);
-        assert_eq!(db.account_balance(account_id).unwrap().minor_units(), -600);
+        assert_eq!(net(&db, account_id), -600);
     }
 
     /// Y reimportar el mismo extracto no puede duplicar nada: las repeticiones
@@ -593,9 +602,6 @@ mod tests {
 
         assert_eq!(second.inserted, 0, "la reimportación no añade nada");
         assert_eq!(second.duplicates, 7);
-        assert_eq!(
-            db.account_balance(account_id).unwrap().minor_units(),
-            -600 + 180_000
-        );
+        assert_eq!(net(&db, account_id), -600 + 180_000);
     }
 }

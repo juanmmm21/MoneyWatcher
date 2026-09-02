@@ -35,7 +35,6 @@ fn sample_account() -> Account {
         name: "Cuenta nómina".into(),
         bank: "BBVA".into(),
         kind: AccountKind::Checking,
-        opening_balance: Money::from_minor_units(210_045),
         archived: false,
     }
 }
@@ -62,13 +61,11 @@ fn sample_transaction() -> Transaction {
 fn account_types_serialize_in_camel_case() {
     let account = serde_json::to_value(sample_account()).unwrap();
     assert_camel_case(&account, "Account");
-    assert_eq!(account["openingBalance"], serde_json::json!("2100.45"));
 
     let new_account = serde_json::to_value(NewAccount {
         name: "Cuenta nómina".into(),
         bank: "BBVA".into(),
         kind: AccountKind::Checking,
-        opening_balance: Money::from_minor_units(210_045),
     })
     .unwrap();
     assert_camel_case(&new_account, "NewAccount");
@@ -120,11 +117,10 @@ fn new_account_deserializes_from_the_frontend_payload() {
         "name": "Cuenta nómina",
         "bank": "BBVA",
         "kind": "checking",
-        "openingBalance": "2100.45",
     });
 
     let account: NewAccount = serde_json::from_value(payload).expect("payload del frontend válido");
-    assert_eq!(account.opening_balance, Money::from_minor_units(210_045));
+    assert_eq!(account.kind, AccountKind::Checking);
 }
 
 #[test]
@@ -132,9 +128,9 @@ fn bank_summary_serializes_in_camel_case() {
     let summary = serde_json::to_value(BankSummary {
         bank: "Revolut".into(),
         accounts: 2,
-        balance: Money::from_minor_units(58_500),
         income: Money::from_minor_units(50_000),
         expense: Money::from_minor_units(1_500),
+        net: Money::from_minor_units(48_500),
     })
     .unwrap();
     assert_camel_case(&summary, "BankSummary");

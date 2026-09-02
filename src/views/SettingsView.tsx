@@ -3,7 +3,6 @@ import { useCallback, useState } from "react";
 import { AccountDialog } from "../components/AccountDialog";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorMessage } from "../lib/ipc";
-import { formatMoney } from "../lib/money";
 import type { Account, AppInfo, AssistantStatus, ImportRecord } from "../types/ipc";
 import { DEFAULT_OLLAMA_ENDPOINT, DEFAULT_OLLAMA_MODEL } from "../lib/constants";
 
@@ -122,7 +121,7 @@ export function SettingsView({
               <tr>
                 <th>Banco</th>
                 <th>Cuenta</th>
-                <th className="table__amount">Saldo</th>
+                <th className="table__amount">Movimientos</th>
                 <th style={{ width: 120 }} />
               </tr>
             </thead>
@@ -134,9 +133,7 @@ export function SettingsView({
                     {account.name}
                     {account.archived ? <span className="badge"> archivada</span> : null}
                   </td>
-                  <td className="table__amount tabular">
-                    {formatMoney(account.balance)}
-                  </td>
+                  <td className="table__amount tabular">{account.transactions}</td>
                   <td>
                     <button
                       type="button"

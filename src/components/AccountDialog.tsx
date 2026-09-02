@@ -16,12 +16,12 @@ const KINDS: { value: AccountKind; label: string }[] = [
   { value: "investment", label: "Inversión" },
 ];
 
-/** Alta de cuenta: banco, nombre y saldo de partida. */
+/** Alta de cuenta: banco, nombre y tipo. No hay saldo: la app guarda
+ * movimientos, no cuánto dinero hay en el banco. */
 export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
   const [bank, setBank] = useState("");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<AccountKind>("checking");
-  const [openingBalance, setOpeningBalance] = useState("0.00");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -33,9 +33,6 @@ export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
         name: name.trim(),
         bank: bank.trim(),
         kind,
-        // El núcleo acepta la cadena tal cual y la valida al parsearla, así que
-        // se envía sin tocar: nada de convertir a número por el camino.
-        openingBalance: openingBalance.trim() === "" ? "0.00" : openingBalance.trim(),
       });
       onCreated(created);
     } catch (createError) {
@@ -92,15 +89,6 @@ export function AccountDialog({ onClose, onCreated }: AccountDialogProps) {
             </label>
 
 
-            <label className="field" style={{ width: 140 }}>
-              Saldo inicial
-              <input
-                className="input tabular"
-                value={openingBalance}
-                onChange={(event) => setOpeningBalance(event.target.value)}
-                placeholder="0,00"
-              />
-            </label>
           </div>
 
           {error ? <div className="banner banner--error">{error}</div> : null}
