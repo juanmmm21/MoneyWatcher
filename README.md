@@ -63,9 +63,10 @@ your confirmation.
 - **Transfers between your own accounts stop counting twice.** Moving 300 € from your current
   account to your savings is not a 300 € expense plus a 300 € income, but that is what two
   statements say. The app pairs the two sides — same amount, opposite signs, different accounts, at
-  most two days apart — and leaves them out of the totals. On a real year across five banks that
-  was 161 pairs and 42,621 € removed from each column. It is off until you switch it on, every
-  pair is listed for review, and one click puts a wrong one back where it was.
+  most two days apart — and leaves them out of the totals. Tested against a real year of
+  statements from five banks, transfers turned out to be more than a third of both columns. It is
+  off until you switch it on, every pair is listed for review, and one click puts a wrong one back
+  where it was.
 - **Statement parsing that survives real banks.** Preambles before the header, cover sheets before
   the movements, Windows-1252 encoding, semicolon delimiters, split debit/credit columns, fees
   charged in a column of their own, amounts padded to nine decimal places, ambiguous `03/04/2026`

@@ -10,9 +10,9 @@ and the dashboard says so — inflating both columns with money that never left 
 flattening the savings rate, and putting the receiving bank in the list of places where money is
 spent.
 
-Measured on seven real statements (3,802 movements across five banks), 161 pairs were transfers.
-They accounted for 42,621 € of "income" and the same amount of "expense" — more than a third of
-both totals. Every conclusion the dashboard offered about that year was distorted by them.
+Measured on seven real statements (3,802 movements across five banks), 161 pairs turned out to be
+transfers, and they accounted for more than a third of both the income and the expense totals. Every
+conclusion the dashboard offered about that year was distorted by them.
 
 Nothing in a bank statement says "this is a transfer". The only signal available is the shape of
 the pair: the same amount with opposite signs, in two different accounts, a day or two apart. That
