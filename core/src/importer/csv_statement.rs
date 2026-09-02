@@ -88,9 +88,108 @@ pub struct StatementPreview {
     pub skipped: Vec<SkippedRow>,
 }
 
+/// Una fila en la que el salto de saldo del extracto no coincide con el importe
+/// que se ha leído de esa misma fila.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BalanceMismatch {
+    pub line: u64,
+    /// Lo que dice la columna de saldo que se movió.
+    pub expected: Money,
+    /// Lo que se ha leído de la columna de importe.
+    pub found: Money,
+}
+
+/// Contraste entre los importes leídos y la columna de saldo del propio
+/// extracto. Es la comprobación que decide si un formato nuevo se ha entendido
+/// bien: si el banco dice que tras cada movimiento quedaban X, la diferencia
+/// entre dos saldos consecutivos tiene que ser exactamente el importe de en
+/// medio, al céntimo.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BalanceCheck {
+    pub matched: usize,
+    pub mismatches: Vec<BalanceMismatch>,
+    /// El fichero va del movimiento más antiguo al más reciente.
+    pub oldest_first: bool,
+}
+
+impl BalanceCheck {
+    pub fn is_consistent(&self) -> bool {
+        self.mismatches.is_empty()
+    }
+}
+
 impl StatementPreview {
     pub fn total_amount(&self) -> Money {
         self.rows.iter().map(|row| row.amount).sum()
+    }
+
+    /// Comprueba los importes contra la columna de saldo, si el extracto la
+    /// trae. Devuelve `None` cuando no hay saldos suficientes que contrastar.
+    ///
+    /// El orden de las filas no se da por supuesto: los extractos llegan tanto
+    /// del movimiento más antiguo al más reciente como al revés, así que se
+    /// prueban los dos sentidos y gana el que cuadra más veces.
+    pub fn balance_check(&self) -> Option<BalanceCheck> {
+        let ascending = self.check_in_order(true);
+        let descending = self.check_in_order(false);
+
+        match (ascending, descending) {
+            (Some(ascending), Some(descending)) => {
+                if descending.matched > ascending.matched {
+                    Some(descending)
+                } else {
+                    Some(ascending)
+                }
+            }
+            (ascending, descending) => ascending.or(descending),
+        }
+    }
+
+    fn check_in_order(&self, oldest_first: bool) -> Option<BalanceCheck> {
+        let mut matched = 0;
+        let mut mismatches = Vec::new();
+        let mut pairs = 0;
+
+        for window in self.rows.windows(2) {
+            let (previous, current) = (&window[0], &window[1]);
+            let (Some(previous_balance), Some(current_balance)) =
+                (previous.balance_after, current.balance_after)
+            else {
+                continue;
+            };
+
+            pairs += 1;
+            // Leído de más antiguo a más reciente, el saldo de una fila es el de
+            // la anterior más su propio importe; al revés, el movimiento que
+            // explica el salto es el de la fila anterior.
+            let (expected, row) = if oldest_first {
+                (current_balance - previous_balance, current)
+            } else {
+                (previous_balance - current_balance, previous)
+            };
+
+            if expected == row.amount {
+                matched += 1;
+            } else {
+                mismatches.push(BalanceMismatch {
+                    line: row.line,
+                    expected,
+                    found: row.amount,
+                });
+            }
+        }
+
+        if pairs == 0 {
+            return None;
+        }
+
+        Some(BalanceCheck {
+            matched,
+            mismatches,
+            oldest_first,
+        })
     }
 }
 

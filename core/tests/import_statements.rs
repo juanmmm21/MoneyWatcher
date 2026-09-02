@@ -172,3 +172,48 @@ fn stops_at_the_second_table_and_says_so() {
         "la vista previa debe avisar de que el fichero traía más tablas"
     );
 }
+
+/// La comprobación que decide si un formato nuevo se ha entendido bien: el
+/// salto entre dos saldos consecutivos tiene que ser el importe de en medio.
+#[test]
+fn balance_check_confirms_a_statement_that_adds_up() {
+    let preview = parse_csv(&fixture("bank_es_semicolon.csv")).expect("extracto legible");
+    let check = preview.balance_check().expect("el extracto trae saldos");
+
+    assert!(check.is_consistent(), "{:?}", check.mismatches);
+    assert!(
+        check.oldest_first,
+        "las filas van del más antiguo al más reciente"
+    );
+    assert_eq!(check.matched, 4);
+
+    let uk = parse_csv(&fixture("bank_uk_debit_credit.csv")).expect("extracto legible");
+    assert!(uk.balance_check().expect("trae saldos").is_consistent());
+}
+
+/// Sin columna de saldo no hay nada que contrastar, y decirlo es mejor que
+/// dar por bueno un extracto que nadie ha comprobado.
+#[test]
+fn balance_check_is_absent_without_a_balance_column() {
+    let preview = parse_csv(&fixture("bank_us_iso.csv")).expect("extracto legible");
+    assert!(preview.balance_check().is_none());
+}
+
+/// Extracto en orden inverso y con una columna de comisión aparte: el saldo se
+/// mueve más de lo que dice la columna de importe, y la comprobación lo señala.
+#[test]
+fn balance_check_reports_the_rows_that_do_not_add_up() {
+    let preview = parse_csv(&fixture("bank_newest_first_fee.csv")).expect("extracto legible");
+    let check = preview.balance_check().expect("el extracto trae saldos");
+
+    assert!(
+        !check.oldest_first,
+        "las filas van de la más reciente a la más antigua"
+    );
+    assert_eq!(check.mismatches.len(), 2);
+    assert_eq!(
+        check.mismatches[0].expected,
+        Money::from_minor_units(-50_000)
+    );
+    assert_eq!(check.mismatches[0].found, Money::from_minor_units(-49_802));
+}

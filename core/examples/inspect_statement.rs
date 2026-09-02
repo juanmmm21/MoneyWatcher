@@ -31,6 +31,34 @@ fn main() {
                 "suma importes : {}",
                 preview.total_amount().to_decimal_string()
             );
+            match preview.balance_check() {
+                Some(check) if check.is_consistent() => println!(
+                    "saldo         : cuadra en {} saltos ({})",
+                    check.matched,
+                    if check.oldest_first {
+                        "del más antiguo al más reciente"
+                    } else {
+                        "del más reciente al más antiguo"
+                    }
+                ),
+                Some(check) => {
+                    println!(
+                        "saldo         : {} saltos cuadran y {} no",
+                        check.matched,
+                        check.mismatches.len()
+                    );
+                    for mismatch in check.mismatches.iter().take(5) {
+                        println!(
+                            "  línea {}: el saldo se mueve {} pero el importe dice {}",
+                            mismatch.line,
+                            mismatch.expected.to_decimal_string(),
+                            mismatch.found.to_decimal_string()
+                        );
+                    }
+                }
+                None => println!("saldo         : el extracto no trae columna de saldo"),
+            }
+
             for skipped in preview.skipped.iter().take(5) {
                 println!("  línea {}: {}", skipped.line, skipped.reason);
             }

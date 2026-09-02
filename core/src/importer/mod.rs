@@ -7,5 +7,7 @@ mod dates;
 mod decode;
 mod mapping;
 
-pub use csv_statement::{parse_csv, ImportError, ParsedRow, SkippedRow, StatementPreview};
+pub use csv_statement::{
+    parse_csv, BalanceCheck, BalanceMismatch, ImportError, ParsedRow, SkippedRow, StatementPreview,
+};
 pub use mapping::{AmountColumns, ColumnMapping};
