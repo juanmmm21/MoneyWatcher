@@ -17,13 +17,14 @@ tagging them by hand. It works, and it is tedious enough that it eventually stop
 MoneyWatcher keeps that mental model — money organised **by bank**, split into **income** and
 **expense** — and removes the manual part:
 
-- You import the CSV your bank gives you. The app figures out the delimiter, the encoding, which
-  row is the header, which columns hold the date, the description and the amount, and whether the
-  file uses `1.234,56` or `1,234.56`.
+- You import the file your bank gives you — a CSV or the Excel workbook some banks offer instead.
+  The app figures out the delimiter or the right sheet, the encoding, which row is the header,
+  which columns hold the date, the description and the amount, and whether the file uses
+  `1.234,56` or `1,234.56`.
 - Every movement gets categorised by rules that the app learns from your own corrections. Fix
   "MERCADONA" once and every past and future Mercadona lands in Groceries by itself.
 - The dashboard is a grid of widgets you arrange yourself: monthly income vs expense, breakdown by
-  category, balance per bank, where your money actually goes. Add, resize, drag, remove.
+  category, income and expense per bank, where your money actually goes. Add, resize, drag, remove.
 
 An optional assistant (a local model served by Ollama) can propose categories for the leftovers
 that no rule matched. It is off by default, it only ever proposes, and nothing is applied without
@@ -33,11 +34,19 @@ your confirmation.
 
 - **Money is never a float.** Every amount is an `i64` of minor units inside a `Money` type, and it
   crosses the Rust ↔ TypeScript boundary as a decimal string. No accumulated rounding error in the
-  monthly totals, no `0.30000000000000004` in a balance.
-- **Statement parsing that survives real banks.** Preambles before the header, Windows-1252
-  encoding, semicolon delimiters, split debit/credit columns, ambiguous `03/04/2026` dates resolved
-  once per file instead of row by row, and unreadable rows reported with a reason instead of
-  silently dropped.
+  monthly totals, no `0.30000000000000004` in a total.
+
+- **Movements, not balances.** The app records what moved and when. It never asks you for an
+  opening balance and never claims to know how much money sits in your account — a number it could
+  only keep right if you imported every statement, in order, forever. What each statement says the
+  balance was is still read, but only to check the file was understood: if the jump between two
+  consecutive balances does not match the amount between them, the import is wrong and you are
+  told.
+- **Statement parsing that survives real banks.** Preambles before the header, cover sheets before
+  the movements, Windows-1252 encoding, semicolon delimiters, split debit/credit columns, fees
+  charged in a column of their own, amounts padded to nine decimal places, ambiguous `03/04/2026`
+  dates resolved once per file instead of row by row, and unreadable rows reported with a reason
+  instead of silently dropped.
 - **Deterministic first, AI second.** The categorisation engine is a plain, ordered rule evaluator
   that runs offline in microseconds. The LLM is a bolt-on for the residue, isolated behind an
   adapter, and the app is fully functional with the network cable pulled out.
@@ -48,7 +57,7 @@ your confirmation.
 ## How it works
 
 ```text
-   bank CSV ──▶ importer ──▶ preview  ──▶ transactions (SQLite)
+  statement ──▶ importer ──▶ preview  ──▶ transactions (SQLite)
                                 │              │
                                 │              ├──▶ rule engine ──▶ categories
                                 │              │         ▲
@@ -72,7 +81,7 @@ MoneyWatcher/
 │   ├── src/
 │   │   ├── domain/            # Money, Account, Transaction, Category, Rule + typed ids
 │   │   ├── storage/           # SQLite connection, migrations and repositories
-│   │   ├── importer/          # encoding, delimiter, header, column and date detection
+│   │   ├── importer/          # CSV and spreadsheet readers + header, column and date detection
 │   │   ├── rules/             # rule engine and rule learning
 │   │   ├── analytics/         # aggregations that feed the widgets
 │   │   └── ai/                # optional assistant (Ollama adapter, prompt, answer parsing)
@@ -123,10 +132,10 @@ Settings → *Your data* shows the exact path in the app. Back it up by copying 
 
 ## Using it
 
-1. **Create an account per bank** in Settings (bank name, account name, currency, opening balance).
-2. **Import a statement**: *Import statement* → pick the account → choose the CSV. The app shows
-   what it understood — delimiter, detected columns, the parsed rows and any line it could not
-   read — and only writes to the database when you confirm.
+1. **Create an account per bank** in Settings (bank name, account name, kind).
+2. **Import a statement**: *Import statement* → pick the account → choose the file. The app shows
+   what it understood — the delimiter or sheet it read, the detected columns, the parsed rows and
+   any line it could not read — and only writes to the database when you confirm.
 3. **Categorise**: rules run automatically after every import. Whatever is left shows up in the
    dashboard as *movimientos sin categorizar*; fix one in the Movimientos table and, with
    *aprender de mis correcciones* enabled, the app writes the rule and applies it to the rest of
@@ -136,20 +145,29 @@ Settings → *Your data* shows the exact path in the app. Back it up by copying 
 
 ### Supported statement formats
 
-CSV and tab-separated exports, which is what virtually every bank offers. The importer detects:
+CSV and tab-separated exports, plus the Excel workbooks (`.xlsx`, `.xls`) and OpenDocument sheets
+(`.ods`) that several banks offer instead. The format is decided by the file's content, not its
+extension. The importer detects:
 
 | Aspect | Handled |
 | --- | --- |
+| File type | CSV / TSV, `.xlsx`, `.xls`, `.ods` |
 | Delimiter | `;` `,` tab `\|` |
 | Encoding | UTF-8 (with or without BOM) and Windows-1252 |
-| Header | any row within the first 30, so bank preambles are skipped |
-| Date columns | booking date and value date, `dd/mm/yyyy`, `mm/dd/yyyy`, `yyyy-mm-dd`, 2-digit years |
+| Sheet | the one that looks like a movement table, so cover and summary sheets are skipped |
+| Header | any row within the first 500, so bank preambles are skipped |
+| Date columns | booking date and value date, `dd/mm/yyyy`, `mm/dd/yyyy`, `yyyy-mm-dd`, 2-digit years, written months (`12 feb 2026`), and real spreadsheet dates |
 | Amount columns | one signed column, or separate debit/credit columns |
-| Amount formats | `1.234,56`, `1,234.56`, `(45,00)`, `12,00-`, `1.234,56 €`, `EUR 12,00` |
-| Extra columns | counterparty and running balance when present |
+| Amount formats | `1.234,56`, `1,234.56`, `(45,00)`, `12,00-`, `1.234,56 €`, `EUR 12,00`, `12.710000000` |
+| Fees | a fee column charged on top of the amount is subtracted, but only when the statement's own balance confirms it |
+| Extra columns | counterparty and the running balance the statement reports |
 
 Column names are matched in Spanish and English (`Fecha operación`, `Concepto`, `Importe`, `Cargo`,
-`Abono`, `Saldo`, `Date`, `Description`, `Debit`, `Credit`, `Balance`, …).
+`Abono`, `Saldo`, `Disponible`, `Comisión`, `Date`, `Description`, `Debit`, `Credit`, `Balance`, …).
+
+Whatever the format, the amounts are checked against the balance the statement itself reports:
+between two consecutive rows, the jump in balance has to be exactly the amount in between. It is
+the cheapest way to know a new bank's format was read correctly, down to the cent.
 
 ### The optional assistant
 
@@ -166,10 +184,10 @@ your own tooling:
 
 ```rust
 use moneywatcher_core::domain::AccountId;
-use moneywatcher_core::importer::parse_csv;
+use moneywatcher_core::importer::parse_statement;
 
-let bytes = std::fs::read("statement.csv")?;
-let preview = parse_csv(&bytes)?;
+let bytes = std::fs::read("statement.xlsx")?;
+let preview = parse_statement(&bytes)?;
 
 println!("{} movements, {} unreadable lines", preview.rows.len(), preview.skipped.len());
 println!("period total: {}", preview.total_amount().to_decimal_string());

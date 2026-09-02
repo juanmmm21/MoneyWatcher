@@ -19,7 +19,7 @@ to SQLite. Nothing points back up.
 ┌───────────────────────────▼─────────────────────────────────┐
 │ core/           moneywatcher-core (no UI dependency)        │
 │   domain/    Money, Account, Transaction, Category, Rule    │
-│   importer/  bytes → ParsedRow, with format detection       │
+│   importer/  bytes → ParsedRow (CSV and spreadsheets)       │
 │   rules/     RuleEngine + learning from corrections         │
 │   analytics/ SQL aggregations for the widgets               │
 │   ai/        optional Ollama adapter                        │
@@ -39,11 +39,11 @@ to SQLite. Nothing points back up.
 
 ## Data model
 
-Six tables, all created by `core/migrations/0001_initial.sql`:
+Seven tables, created by `core/migrations/0001_initial.sql` and refined by later migrations:
 
 | Table | Purpose |
 | --- | --- |
-| `accounts` | one row per account, unique per `(bank, name)`, with its opening balance |
+| `accounts` | one row per account, unique per `(bank, name)`. No balance: the app records movements |
 | `categories` | income / expense / transfer buckets; the seeded ones are flagged `is_system` |
 | `transactions` | the movements, with `UNIQUE (account_id, fingerprint)` for deduplication |
 | `imports` | one row per imported file, so an import can be reverted as a unit |
@@ -63,15 +63,27 @@ databases have already applied them; a change means a new file and a new entry.
 
 ## Import pipeline
 
-1. **Decode** — UTF-8 with BOM stripping, falling back to Windows-1252 when the bytes are not valid
-   UTF-8 (Spanish banks still export in it).
-2. **Delimiter and header** — every candidate delimiter is tried; for each one the first 30 records
-   are scanned for a row whose headers map to at least a date, a description and an amount. The
-   candidate that maps the most fields wins.
-3. **Date order** — resolved once for the whole file by looking for a value above 12 in the date
+A statement is a grid of cells, whether it came from a CSV or from a spreadsheet. `importer/`
+splits accordingly: `csv_statement.rs` and `excel.rs` only produce cells, and everything that
+happens afterwards lives in `statement.rs` and is shared.
+
+1. **Format** — decided by the file's first bytes: a ZIP or a Compound File is a spreadsheet, and
+   anything else is text. A workbook renamed to `.csv` is still read correctly.
+2. **Cells** — CSV is decoded as UTF-8 with BOM stripping, falling back to Windows-1252 (Spanish
+   banks still export in it), and split with each candidate delimiter. A spreadsheet is read with
+   `calamine`; dates come back as real dates and amounts as numbers, and both are rendered to the
+   text the rest of the pipeline expects.
+3. **Header** — the first 500 rows are scanned for one whose headers map to at least a date, a
+   description and an amount. Every reading of the file (each delimiter, each sheet) is scored on
+   how many fields it maps, and the best one wins.
+4. **Date order** — resolved once for the whole file by looking for a value above 12 in the date
    column, then applied to every row. Two-digit years are expanded with the POSIX convention.
-4. **Rows** — each record becomes a `ParsedRow`, or a `SkippedRow` carrying the reason, which the
+5. **Rows** — each record becomes a `ParsedRow`, or a `SkippedRow` carrying the reason, which the
    preview dialog shows before anything is written.
+6. **Balance check** — if the statement reports a running balance, the jump between two consecutive
+   rows must equal the amount in between. It is what tells a new bank's format was read correctly,
+   and it is also what decides whether a fee column is charged on top of the amount or already
+   included in it.
 
 Nothing touches the database until the user confirms the preview. On confirmation the rows become
 `NewTransaction`s tied to an `imports` row, are inserted in a single SQL transaction with

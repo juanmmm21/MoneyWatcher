@@ -24,5 +24,5 @@ even a core that computes exactly would hand the frontend a lossy value.
 - Every arithmetic operation is exact, and `0.10 × 10` is exactly `1.00`.
 - Amount parsing is explicit and testable: `Money::parse_flexible` handles the formats real banks
   emit, including thousands separators, trailing signs and parenthesised negatives.
-- Supporting a currency with a different number of decimals (JPY, KWD) would require revisiting the
-  fixed scale.
+- The scale is fixed at two decimals, which is what the euro needs (see ADR 0006). A currency with
+  a different number of decimals (JPY, KWD) would require revisiting it.
