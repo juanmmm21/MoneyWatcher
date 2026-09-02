@@ -165,6 +165,14 @@ export interface CounterpartyTotal {
 }
 
 export interface DashboardOverview {
+  /**
+   * Divisa a la que corresponden todos los importes del resumen. La resuelve el
+   * núcleo, así que es siempre la que de verdad se ha agregado; null solo
+   * cuando todavía no hay ninguna cuenta.
+   */
+  currency: string | null;
+  /** Divisas entre las que puede elegir el usuario, la más usada primero. */
+  currencies: CurrencyUsage[];
   totals: FlowTotals;
   monthly: MonthlyFlow[];
   expensesByCategory: CategorySlice[];
