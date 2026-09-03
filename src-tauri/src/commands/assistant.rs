@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
-use moneywatcher_core::ai::{self, AiProvider, PendingGroup};
+use moneywatcher_core::ai::{self, AiProvider, BrandFact, BrandLookupSettings, PendingGroup};
 use moneywatcher_core::domain::{CategoryId, Money, Transaction, TransactionId};
-use moneywatcher_core::storage::TransactionFilter;
+use moneywatcher_core::storage::{Database, TransactionFilter};
 use serde::Serialize;
 use tauri::State;
 
@@ -69,6 +69,100 @@ pub struct SuggestionBatch {
     pub asked_patterns: Vec<String>,
     /// Comercios que quedan sin preguntar después de esta tanda.
     pub remaining_groups: usize,
+    /// Comercios de los que se ha sabido algo consultando fuera.
+    pub brands_used: usize,
+    /// Consultas de marca que no llegaron a responder.
+    pub brand_lookups_failed: usize,
+}
+
+/// Estado de la consulta de marcas, con lo que ya se ha preguntado.
+///
+/// El recuento no es adorno: es la única forma que tiene el usuario de ver
+/// cuánto ha salido de su equipo, y lo que da sentido al botón de olvidarlo.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BrandLookupStatus {
+    pub enabled: bool,
+    pub cached_terms: i64,
+}
+
+fn brand_lookup_settings(database: &Database) -> CommandResult<BrandLookupSettings> {
+    match database.setting(ai::BRAND_SETTINGS_KEY)? {
+        Some(raw) => Ok(serde_json::from_str(&raw)?),
+        None => Ok(BrandLookupSettings::default()),
+    }
+}
+
+#[tauri::command]
+pub fn brand_lookup_status(state: State<'_, AppState>) -> CommandResult<BrandLookupStatus> {
+    let database = state.database()?;
+    Ok(BrandLookupStatus {
+        enabled: brand_lookup_settings(&database)?.enabled,
+        cached_terms: database.count_brand_lookups()?,
+    })
+}
+
+#[tauri::command]
+pub fn set_brand_lookup(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> CommandResult<BrandLookupStatus> {
+    let database = state.database()?;
+    database.set_setting(
+        ai::BRAND_SETTINGS_KEY,
+        &serde_json::to_string(&BrandLookupSettings { enabled })?,
+    )?;
+    Ok(BrandLookupStatus {
+        enabled,
+        cached_terms: database.count_brand_lookups()?,
+    })
+}
+
+/// Borra lo consultado. Apagar el ajuste deja de preguntar; esto además olvida.
+#[tauri::command]
+pub fn forget_brand_lookups(state: State<'_, AppState>) -> CommandResult<usize> {
+    Ok(state.database()?.forget_brand_lookups()?)
+}
+
+/// Reúne lo que se sabe de los comercios de la tanda.
+///
+/// Solo sale a la red lo que no esté ya en la caché local, y solo los términos
+/// que `searchable_term` deja pasar. Una consulta que falla no rompe la tanda
+/// —el asistente funciona igual sin ella— pero se cuenta, para que la interfaz
+/// pueda decir que la red no respondió en vez de enseñar peores propuestas sin
+/// explicación.
+fn resolve_brands(
+    database: &Database,
+    groups: &[&PendingGroup],
+) -> CommandResult<(Vec<BrandFact>, usize)> {
+    let mut facts = Vec::new();
+    let mut failed = 0;
+
+    for group in groups {
+        let Some(term) = ai::searchable_term(&group.pattern, &group.representative.description)
+        else {
+            continue;
+        };
+
+        if let Some(cached) = database.brand_lookup(&term)? {
+            if let Some(summary) = cached.summary {
+                facts.push(BrandFact { term, summary });
+            }
+            continue;
+        }
+
+        match ai::look_up_brand(&term) {
+            Ok(summary) => {
+                database.cache_brand_lookup(&term, summary.as_deref())?;
+                if let Some(summary) = summary {
+                    facts.push(BrandFact { term, summary });
+                }
+            }
+            Err(_) => failed += 1,
+        }
+    }
+
+    Ok((facts, failed))
 }
 
 #[tauri::command]
@@ -146,9 +240,6 @@ pub fn suggest_categories(
         ..Default::default()
     })?;
     let categories = database.categories()?;
-    // La conexión se libera antes de la llamada al modelo, que puede tardar
-    // bastante y bloquearía al resto de la interfaz.
-    drop(database);
 
     let groups = ai::group_pending(&pending);
     let pending_transactions = pending.len();
@@ -162,11 +253,22 @@ pub fn suggest_categories(
     let remaining_groups = fresh.count();
     let asked_patterns: Vec<String> = batch.iter().map(|group| group.pattern.clone()).collect();
 
+    let (brands, brand_lookups_failed) = if brand_lookup_settings(&database)?.enabled {
+        resolve_brands(&database, &batch)?
+    } else {
+        (Vec::new(), 0)
+    };
+
     let representatives: Vec<Transaction> = batch
         .iter()
         .map(|group| group.representative.clone())
         .collect();
-    let suggestions = ai::suggest_categories(&provider, &representatives, &categories)?;
+    // La conexión se libera antes de la llamada al modelo, que puede tardar
+    // bastante y bloquearía al resto de la interfaz.
+    drop(database);
+
+    let brands_used = brands.len();
+    let suggestions = ai::suggest_categories(&provider, &representatives, &categories, &brands)?;
 
     let mut views = Vec::with_capacity(suggestions.len());
     for suggestion in suggestions {
@@ -199,5 +301,7 @@ pub fn suggest_categories(
         pending_groups,
         asked_patterns,
         remaining_groups,
+        brands_used,
+        brand_lookups_failed,
     })
 }

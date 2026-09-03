@@ -6,6 +6,7 @@
 //! sale de la máquina; usar un proveedor remoto exige que el usuario lo active
 //! a conciencia y se le advierta de lo que implica.
 
+mod brands;
 mod grouping;
 mod ollama;
 mod prompt;
@@ -14,6 +15,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{Category, Transaction};
 
+pub use brands::{
+    look_up as look_up_brand, searchable_term, BrandFact, BrandLookupSettings, BRAND_SETTINGS_KEY,
+};
 pub use grouping::{group_pending, PendingGroup};
 pub use prompt::{parse_suggestions, SuggestionRequest};
 
@@ -108,12 +112,16 @@ impl Suggestion {
 
 /// Pide al asistente que proponga categoría para un lote de movimientos.
 ///
+/// `brands` es lo que se haya averiguado fuera de esos comercios, si el usuario
+/// encendió la consulta de marcas; vacío es el caso normal.
+///
 /// Nunca escribe en la base de datos: devuelve propuestas que el usuario
 /// acepta o descarta, y solo entonces se convierten en reglas.
 pub fn suggest_categories(
     provider: &AiProvider,
     transactions: &[Transaction],
     categories: &[Category],
+    brands: &[BrandFact],
 ) -> Result<Vec<Suggestion>, AiError> {
     match provider {
         AiProvider::Disabled => Err(AiError::Disabled),
@@ -123,7 +131,7 @@ pub fn suggest_categories(
             }
             let requests: Vec<SuggestionRequest> =
                 transactions.iter().map(SuggestionRequest::from).collect();
-            ollama::suggest(endpoint, model, &requests, categories)
+            ollama::suggest(endpoint, model, &requests, categories, brands)
         }
     }
 }
@@ -158,7 +166,7 @@ mod tests {
         assert!(!provider.is_enabled());
         assert!(!provider.leaves_the_machine());
         assert!(matches!(
-            suggest_categories(&provider, &[], &[]),
+            suggest_categories(&provider, &[], &[], &[]),
             Err(AiError::Disabled)
         ));
     }

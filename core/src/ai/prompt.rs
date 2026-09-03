@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{Category, CategoryKind, Money, Transaction};
 
-use super::{AiError, Suggestion};
+use super::{AiError, BrandFact, Suggestion};
 
 /// Datos de un movimiento que se envían al modelo. Deliberadamente no incluyen
 /// identificadores, cuentas ni saldos: para proponer una categoría basta con el
@@ -75,7 +75,11 @@ fn hint_for(category: &str) -> Option<&'static str> {
     Some(hint)
 }
 
-pub(super) fn build(requests: &[SuggestionRequest], categories: &[Category]) -> String {
+pub(super) fn build(
+    requests: &[SuggestionRequest],
+    categories: &[Category],
+    brands: &[BrandFact],
+) -> String {
     let mut prompt = String::new();
 
     // El modelo necesita saber qué está leyendo: los conceptos llegan en
@@ -121,6 +125,23 @@ pub(super) fn build(requests: &[SuggestionRequest], categories: &[Category]) -> 
          A place or city name after the business word is just the branch: \"Cafe Himilce\"\n\
          is a cafe and \"Parking Santa Margarita\" is a car park.\n",
     );
+
+    // Lo que se haya averiguado fuera va después de las heurísticas y antes del
+    // formato de respuesta: es lo más concreto que tiene el modelo sobre estos
+    // comercios en particular, y por eso se le dice que mande sobre su idea.
+    if !brands.is_empty() {
+        prompt.push_str(
+            "\nThese merchant names were looked up and are known to be the following. Trust\n\
+             this over your own guess about the name:\n",
+        );
+        for brand in brands {
+            prompt.push_str(&format!(
+                "- {}: {}\n",
+                brand.term.to_uppercase(),
+                brand.summary
+            ));
+        }
+    }
 
     // Omitir un índice deja al usuario sin propuesta y sin explicación, así que
     // se pide una respuesta para todos con una salida de baja confianza.
@@ -262,7 +283,7 @@ mod tests {
 
     #[test]
     fn prompt_lists_categories_and_transactions() {
-        let prompt = build(&requests(), &categories());
+        let prompt = build(&requests(), &categories(), &[]);
         assert!(prompt.contains("- Supermercado: supermarkets"));
         assert!(prompt.contains("- Suministros: power, water"));
         assert!(prompt.contains("0. COMPRA TARJ MERCADONA | amount: -45.12"));
@@ -292,7 +313,7 @@ mod tests {
             fingerprint: "9f2c8ab1e4".into(),
         };
 
-        let prompt = build(&[SuggestionRequest::from(&transaction)], &categories());
+        let prompt = build(&[SuggestionRequest::from(&transaction)], &categories(), &[]);
 
         for leaked in ["4242", "77", "9187.33", "nota privada", "9f2c8ab1e4", "31"] {
             assert!(
@@ -415,7 +436,7 @@ mod tests {
     /// mayor parte de un extracto real. Si alguien la recorta, este test avisa.
     #[test]
     fn prompt_explains_how_spanish_businesses_are_named() {
-        let prompt = build(&requests(), &categories());
+        let prompt = build(&requests(), &categories(), &[]);
 
         for word in [
             "CAFETERIA",

@@ -108,7 +108,7 @@ fn main() {
         let mut suggestions = Vec::new();
         let mut failed = None;
         for (batch, chunk) in transactions.chunks(BATCH).enumerate() {
-            match ai::suggest_categories(&provider, chunk, &categories) {
+            match ai::suggest_categories(&provider, chunk, &categories, &[]) {
                 // Cada lote numera sus sugerencias desde cero: se desplazan al
                 // índice global para poder contrastarlas con CASES.
                 Ok(batch_suggestions) => {

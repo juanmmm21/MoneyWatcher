@@ -61,6 +61,9 @@ pub fn run() {
             commands::assistant::set_assistant_settings,
             commands::assistant::assistant_status,
             commands::assistant::suggest_categories,
+            commands::assistant::brand_lookup_status,
+            commands::assistant::set_brand_lookup,
+            commands::assistant::forget_brand_lookups,
         ])
         .run(tauri::generate_context!())
         .expect("error while running MoneyWatcher");

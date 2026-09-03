@@ -5,7 +5,7 @@ use serde_json::json;
 use crate::domain::Category;
 
 use super::prompt::{self, SuggestionRequest};
-use super::{AiError, Suggestion};
+use super::{AiError, BrandFact, Suggestion};
 
 /// Un modelo local en una máquina modesta puede tardar bastante en un lote
 /// largo, pero un cuelgue indefinido dejaría la interfaz esperando para siempre.
@@ -20,10 +20,11 @@ pub(super) fn suggest(
     model: &str,
     requests: &[SuggestionRequest],
     categories: &[Category],
+    brands: &[BrandFact],
 ) -> Result<Vec<Suggestion>, AiError> {
     let body = json!({
         "model": model,
-        "prompt": prompt::build(requests, categories),
+        "prompt": prompt::build(requests, categories, brands),
         "stream": false,
         // Temperatura baja: aquí no se busca creatividad, sino que el modelo se
         // ciña a la lista de categorías.
