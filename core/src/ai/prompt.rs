@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::{Category, CategoryKind, Money, Transaction};
+use crate::domain::{normalize_description, Category, CategoryKind, Money, Transaction};
 
 use super::{AiError, BrandFact, Suggestion};
 
@@ -126,21 +126,15 @@ pub(super) fn build(
          is a cafe and \"Parking Santa Margarita\" is a car park.\n",
     );
 
-    // Lo que se haya averiguado fuera va después de las heurísticas y antes del
-    // formato de respuesta: es lo más concreto que tiene el modelo sobre estos
-    // comercios en particular, y por eso se le dice que mande sobre su idea.
+    // Lo averiguado fuera va pegado a la línea que lo necesita, no en una lista
+    // aparte. Medido con phi4 sobre diez cadenas españolas: en bloque bajaba de
+    // 10 aciertos a 7, porque el modelo leía la lista como el censo de lo que se
+    // puede reconocer y mandaba a "Otros gastos" todo lo que no salía en ella.
     if !brands.is_empty() {
         prompt.push_str(
-            "\nThese merchant names were looked up and are known to be the following. Trust\n\
-             this over your own guess about the name:\n",
+            "\nSome lines end with a fact looked up about that merchant; trust it over your own\n\
+             guess. A line without one is not an unknown merchant, just one nobody looked up.\n",
         );
-        for brand in brands {
-            prompt.push_str(&format!(
-                "- {}: {}\n",
-                brand.term.to_uppercase(),
-                brand.summary
-            ));
-        }
     }
 
     // Omitir un índice deja al usuario sin propuesta y sin explicación, así que
@@ -148,7 +142,10 @@ pub(super) fn build(
     prompt.push_str(
         "\nAnswer with a JSON array and nothing else. One element per transaction, in order,\n\
          with no index missing:\n\
-         {\"index\": <number>, \"category\": \"<exact category name>\", \"confidence\": <0-100>}.\n\
+         {\"index\": <number>, \"merchant\": \"<one or two words copied from that line>\",\n\
+         \"category\": \"<exact category name>\", \"confidence\": <0-100>}.\n\
+         The merchant field must be copied from the line you are answering about: it is what\n\
+         proves the answer belongs to that line.\n\
          Every index from 0 to the last one must appear exactly once. If no category clearly\n\
          fits, use \"Otros gastos\" for a negative amount or \"Otros ingresos\" for a positive\n\
          one, with a confidence below 40.\n\
@@ -162,15 +159,40 @@ pub(super) fn build(
             .filter(|value| !value.trim().is_empty())
             .map(|value| format!(" | counterparty: {value}"))
             .unwrap_or_default();
+        let brand = brand_for(request, brands)
+            .map(|fact| format!(" | {} is: {}", fact.term.to_uppercase(), fact.summary))
+            .unwrap_or_default();
 
         prompt.push_str(&format!(
-            "{index}. {} | amount: {}{counterparty}\n",
+            "{index}. {} | amount: {}{counterparty}{brand}\n",
             request.description.trim(),
             request.amount.to_decimal_string()
         ));
     }
 
     prompt
+}
+
+/// El dato de marca que le toca a un movimiento, si se consultó alguno.
+///
+/// Los términos salen del propio concepto (son el patrón que aprendería la
+/// regla), así que basta con buscarlos dentro de él.
+fn brand_for<'a>(request: &SuggestionRequest, brands: &'a [BrandFact]) -> Option<&'a BrandFact> {
+    if brands.is_empty() {
+        return None;
+    }
+
+    let counterparty = request
+        .counterparty
+        .as_deref()
+        .map(normalize_description)
+        .unwrap_or_default();
+    let haystack = format!(
+        "{} {counterparty}",
+        normalize_description(&request.description)
+    );
+
+    brands.iter().find(|fact| haystack.contains(&fact.term))
 }
 
 /// Extrae las sugerencias de la respuesta del modelo.
@@ -183,6 +205,13 @@ pub(super) fn build(
 /// También se descarta lo que el signo del importe ya desmiente: un cobro de
 /// supermercado no puede ser "Salary". El modelo se equivoca así de vez en
 /// cuando y es un error que se detecta sin preguntarle a nadie.
+///
+/// Y se comprueba que cada respuesta va donde dice: el modelo pierde la cuenta
+/// de los índices cuando la lista es larga y llega a contestar corrida una
+/// posición, que es el peor fallo posible —la categoría acaba en el movimiento
+/// de al lado, con confianza alta, y de ahí sale una regla equivocada—. Por eso
+/// se le pide que copie el comercio en cada respuesta: si no está en la línea
+/// que dice, se busca la que sí lo tiene y, si no aparece en ninguna, se tira.
 pub fn parse_suggestions(
     answer: &str,
     requests: &[SuggestionRequest],
@@ -196,6 +225,11 @@ pub fn parse_suggestions(
         category: String,
         #[serde(default)]
         confidence: Option<u8>,
+        /// El comercio copiado de la línea, que es lo que ata la respuesta a su
+        /// movimiento. Un modelo puede no devolverlo: entonces solo queda el
+        /// índice, como antes.
+        #[serde(default)]
+        merchant: Option<String>,
     }
 
     let raw: Vec<RawSuggestion> =
@@ -203,7 +237,10 @@ pub fn parse_suggestions(
 
     let mut suggestions = Vec::new();
     for item in raw {
-        let Some(request) = requests.get(item.index) else {
+        let Some(index) = resolve_index(item.index, item.merchant.as_deref(), requests) else {
+            continue;
+        };
+        let Some(request) = requests.get(index) else {
             continue;
         };
 
@@ -219,13 +256,57 @@ pub fn parse_suggestions(
         }
 
         suggestions.push(Suggestion {
-            index: item.index,
+            index,
             category_name: category.name.clone(),
             confidence: item.confidence.unwrap_or(50).min(100),
         });
     }
 
     Ok(suggestions)
+}
+
+/// Comprueba a qué movimiento pertenece de verdad una respuesta.
+///
+/// Sin comercio copiado se cree al índice, que es lo único que hay. Con él, el
+/// índice vale si la línea contiene ese comercio; si no, se busca la línea que
+/// lo contenga, y solo se acepta cuando hay exactamente una: dos candidatas es
+/// tan poco concluyente como ninguna.
+fn resolve_index(
+    declared: usize,
+    merchant: Option<&str>,
+    requests: &[SuggestionRequest],
+) -> Option<usize> {
+    let merchant = merchant.map(normalize_description).unwrap_or_default();
+    if merchant.chars().count() < 3 {
+        return requests.get(declared).map(|_| declared);
+    }
+
+    if requests
+        .get(declared)
+        .is_some_and(|request| mentions(request, &merchant))
+    {
+        return Some(declared);
+    }
+
+    let mut matches = requests
+        .iter()
+        .enumerate()
+        .filter(|(_, request)| mentions(request, &merchant));
+    let (position, _) = matches.next()?;
+    matches.next().is_none().then_some(position)
+}
+
+fn mentions(request: &SuggestionRequest, merchant: &str) -> bool {
+    let counterparty = request
+        .counterparty
+        .as_deref()
+        .map(normalize_description)
+        .unwrap_or_default();
+    let haystack = format!(
+        "{} {counterparty}",
+        normalize_description(&request.description)
+    );
+    haystack.contains(merchant)
 }
 
 /// Un traspaso puede ir en cualquier dirección; un ingreso y un gasto no. El
@@ -407,6 +488,43 @@ mod tests {
     }
 
     /// Un traspaso vale en las dos direcciones: sale de una cuenta y entra en otra.
+    #[test]
+    fn an_answer_lands_on_the_line_whose_merchant_it_copied() {
+        // El modelo se corrió una posición: dijo índice 0 pero copió el
+        // comercio de la línea 1. Manda el comercio.
+        let answer = r#"[{"index": 0, "merchant": "IBERDROLA", "category": "Suministros",
+                          "confidence": 90}]"#;
+        let requests = requests();
+
+        let suggestions = parse_suggestions(answer, &requests, &categories()).unwrap();
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].index, 1, "va a la línea de Iberdrola");
+    }
+
+    #[test]
+    fn an_answer_whose_merchant_is_in_no_line_is_thrown_away() {
+        let answer = r#"[{"index": 0, "merchant": "CARREFOUR", "category": "Supermercado",
+                          "confidence": 90}]"#;
+
+        let suggestions = parse_suggestions(answer, &requests(), &categories()).unwrap();
+
+        assert!(
+            suggestions.is_empty(),
+            "sin línea que lo respalde no se propone nada"
+        );
+    }
+
+    #[test]
+    fn without_a_merchant_the_index_is_all_there_is() {
+        let answer = r#"[{"index": 0, "category": "Supermercado", "confidence": 90}]"#;
+
+        let suggestions = parse_suggestions(answer, &requests(), &categories()).unwrap();
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].index, 0);
+    }
+
     #[test]
     fn transfers_are_valid_in_both_directions() {
         let mut categories = categories();
