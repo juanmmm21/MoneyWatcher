@@ -2,6 +2,7 @@
 //! datos: el resto del núcleo trabaja con los tipos de `domain`.
 
 mod accounts;
+mod brands;
 mod categories;
 mod imports;
 mod rules;
@@ -15,6 +16,7 @@ use std::path::Path;
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
+pub use brands::BrandLookup;
 pub use imports::ImportRecord;
 pub(crate) use transactions::build_where;
 pub use transactions::{InsertSummary, TransactionFilter};
@@ -54,6 +56,11 @@ const MIGRATIONS: &[(i64, &str, &str)] = &[
         6,
         "transfer_links",
         include_str!("../../migrations/0006_transfer_links.sql"),
+    ),
+    (
+        7,
+        "brand_lookups",
+        include_str!("../../migrations/0007_brand_lookups.sql"),
     ),
 ];
 
