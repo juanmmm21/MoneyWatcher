@@ -4,7 +4,10 @@ A local-first desktop dashboard for personal finances: drop in your bank stateme
 sort them out, and read your money as charts and tables instead of spreadsheet rows.
 
 Your transactions never leave your machine. There is no account, no sync, no telemetry and no
-server — the whole app is a single binary and a SQLite file in your user directory.
+server — the whole app is a single binary and a SQLite file in your user directory. Two things can
+reach a network and both are off until you turn them on: the model the assistant talks to, which by
+default is one running on your own machine, and a merchant lookup that sends a shop's name and
+nothing else.
 
 ---
 
@@ -46,7 +49,9 @@ MoneyWatcher keeps that mental model — money organised **by bank**, split into
 
 An optional assistant (a local model served by Ollama) can propose categories for the leftovers
 that no rule matched. It is off by default, it only ever proposes, and nothing is applied without
-your confirmation.
+your confirmation. It works merchant by merchant rather than movement by movement: a history with
+two thousand unclassified movements is a couple of hundred shops repeating, and accepting one
+proposal learns the rule that files the whole group.
 
 ## What makes it interesting
 
@@ -216,6 +221,34 @@ could classify — never account names, balances or identifiers — and shows th
 you to accept one by one. If you point it at a non-local endpoint, the UI warns you explicitly that
 data would leave your machine.
 
+The assistant asks about one movement per merchant, ordered by how many movements each merchant
+drags along, and tells you how many are left so you can walk the whole backlog instead of seeing
+the same first batch again. Every answer has to quote the merchant it is about; an answer that
+quotes a shop from another line is moved to the line it belongs to, or dropped. A model that loses
+count of its own list would otherwise file a category — confidently — against the movement next to
+the right one, and teach a rule from it.
+
+### Looking merchants up online
+
+Settings → *Consultar marcas en internet*, **off by default**. What a model gets wrong is rarely
+the reasoning: it is not knowing that Worten sells electronics or that Consum is a supermarket. With
+this on, each merchant is looked up (DuckDuckGo, then Spanish Wikipedia) before the model is asked,
+and the one-line answer travels with that line. On twelve lesser-known Spanish chains it takes
+`gemma3` from 6 correct to 12, and `phi4` from 8 to 10.
+
+It is the only thing this app sends anywhere besides your own model, so it is fenced in:
+
+- Only the merchant word leaves — `mercadona`, `leroy merlin`. Never the concept, the amount, the
+  date, the account or the counterparty.
+- Nothing at all leaves for a movement that looks like a person: a Bizum, a transfer, a payroll
+  line, rent, a mortgage. In a Spanish statement those carry somebody's name, not a shop's.
+- Answers about anything that is not a business are discarded, because a wrong fact misleads the
+  model more than no fact.
+- Every merchant is asked about once; answers are cached locally and *Olvidar lo consultado* wipes
+  them.
+
+`docs/decisions/0008-brand-lookup-is-opt-in-and-sends-one-word.md` has the reasoning in full.
+
 ## Using the core as a library
 
 The engine is a plain Rust crate with no Tauri dependency, so it can be used from a CLI, a script or
@@ -276,6 +309,11 @@ Runs 35 synthetic Spanish bank descriptions through each model in batches of 25 
 size the app uses — and reports how many it gets right, how many it declines to answer, how many of
 its *confident* answers are right, and how long it took. That last-but-one column is the one that
 matters: a wrong answer the model is sure about is the one a user accepts without looking.
+
+Add `--marcas` and it measures the other question — whether looking merchants up online is worth
+the traffic — by running twelve lesser-known Spanish chains twice through the same model, once with
+the looked-up facts and once without. Both numbers come from the same run because a local model does
+not answer the same way twice.
 
 ### Running against a demo database
 
