@@ -6,6 +6,7 @@
 //! sale de la máquina; usar un proveedor remoto exige que el usuario lo active
 //! a conciencia y se le advierta de lo que implica.
 
+mod grouping;
 mod ollama;
 mod prompt;
 
@@ -13,6 +14,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::{Category, Transaction};
 
+pub use grouping::{group_pending, PendingGroup};
 pub use prompt::{parse_suggestions, SuggestionRequest};
 
 /// Clave con la que se guarda la configuración del asistente en `settings`.
