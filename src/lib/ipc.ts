@@ -20,7 +20,7 @@ import type {
   NewWidget,
   Rule,
   StatementPreview,
-  Suggestion,
+  SuggestionBatch,
   Transaction,
   TransactionFilter,
   TransactionPage,
@@ -116,5 +116,6 @@ export const api = {
   assistantStatus: () => invoke<AssistantStatus>("assistant_status"),
   setAssistantSettings: (provider: AiProvider) =>
     invoke<AiProvider>("set_assistant_settings", { provider }),
-  suggestCategories: () => invoke<Suggestion[]>("suggest_categories"),
+  suggestCategories: (skipPatterns: string[]) =>
+    invoke<SuggestionBatch>("suggest_categories", { skipPatterns }),
 };

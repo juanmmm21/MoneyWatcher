@@ -9,7 +9,10 @@ use super::{AiError, Suggestion};
 
 /// Un modelo local en una máquina modesta puede tardar bastante en un lote
 /// largo, pero un cuelgue indefinido dejaría la interfaz esperando para siempre.
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
+/// El de serie tarda alrededor de 100 s en una tanda de 25, así que dos minutos
+/// no daban margen ninguno: pasarse del plazo devuelve cero propuestas, que es
+/// justo lo que parece un asistente que no dice nada.
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 const AVAILABILITY_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(super) fn suggest(

@@ -3,7 +3,13 @@ import { useCallback, useState } from "react";
 import { useAsync } from "../hooks/useAsync";
 import { api, errorMessage } from "../lib/ipc";
 import { formatMoney, isNegative } from "../lib/money";
-import type { Category, Rule, RuleMatcher, Suggestion } from "../types/ipc";
+import type { Category, Rule, RuleMatcher, Suggestion, SuggestionBatch } from "../types/ipc";
+
+/** Lo que queda por revisar; lo que hace falta para saber si el asistente ha mirado el histórico entero. */
+type Backlog = Pick<
+  SuggestionBatch,
+  "pendingTransactions" | "pendingGroups" | "remainingGroups"
+>;
 
 interface RulesViewProps {
   categories: Category[];
@@ -37,6 +43,10 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
+  // Comercios ya preguntados en esta sesión: se devuelven al núcleo para que la
+  // siguiente tanda siga por donde iba en vez de repetir la primera.
+  const [askedPatterns, setAskedPatterns] = useState<string[]>([]);
+  const [backlog, setBacklog] = useState<Backlog | null>(null);
   const [busy, setBusy] = useState(false);
 
   const confidentSuggestions = (suggestions ?? []).filter((item) => !item.needsReview);
@@ -94,18 +104,34 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
     }
   }, []);
 
-  const askAssistant = useCallback(async () => {
-    setError(null);
-    setBusy(true);
-    setSuggestions(null);
-    try {
-      setSuggestions(await api.suggestCategories());
-    } catch (assistantError) {
-      setError(errorMessage(assistantError));
-    } finally {
-      setBusy(false);
-    }
-  }, []);
+  /** `continuing` sigue por el comercio donde se quedó; si no, empieza de cero. */
+  const askAssistant = useCallback(
+    async (continuing: boolean) => {
+      setError(null);
+      setNotice(null);
+      setBusy(true);
+      const skip = continuing ? askedPatterns : [];
+      if (!continuing) setSuggestions(null);
+
+      try {
+        const batch = await api.suggestCategories(skip);
+        setSuggestions((current) =>
+          continuing ? [...(current ?? []), ...batch.suggestions] : batch.suggestions,
+        );
+        setAskedPatterns([...skip, ...batch.askedPatterns]);
+        setBacklog({
+          pendingTransactions: batch.pendingTransactions,
+          pendingGroups: batch.pendingGroups,
+          remainingGroups: batch.remainingGroups,
+        });
+      } catch (assistantError) {
+        setError(errorMessage(assistantError));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [askedPatterns],
+  );
 
   const acceptSuggestion = useCallback(async (suggestion: Suggestion) => {
     setError(null);
@@ -113,13 +139,27 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
       // De una propuesta dudosa no se aprende ninguna regla aunque el usuario
       // la acepte: si el modelo no reconoció el comercio, generalizarla
       // arrastraría el mismo error a todos los movimientos parecidos.
-      await api.correctTransactionCategory(
+      const result = await api.correctTransactionCategory(
         suggestion.transactionId,
         suggestion.categoryId,
         !suggestion.needsReview,
       );
+      // El corregido más los que arrastró la regla aprendida: es la cifra que
+      // dice si aceptar ha servido de algo.
+      setNotice(`${1 + result.applied.categorized} movimiento(s) categorizados.`);
       setSuggestions((current) =>
         current?.filter((item) => item.transactionId !== suggestion.transactionId) ?? null,
+      );
+      setBacklog((current) =>
+        current
+          ? {
+              ...current,
+              pendingTransactions: Math.max(
+                0,
+                current.pendingTransactions - 1 - result.applied.categorized,
+              ),
+            }
+          : current,
       );
     } catch (acceptError) {
       setError(errorMessage(acceptError));
@@ -134,16 +174,28 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
     setError(null);
     setBusy(true);
     const accepted: number[] = [];
+    let categorized = 0;
     try {
       for (const suggestion of confident) {
-        await api.correctTransactionCategory(
+        const result = await api.correctTransactionCategory(
           suggestion.transactionId,
           suggestion.categoryId,
           true,
         );
+        categorized += 1 + result.applied.categorized;
         accepted.push(suggestion.transactionId);
       }
-      setNotice(`${accepted.length} categorías aplicadas.`);
+      setNotice(
+        `${accepted.length} propuesta(s) aceptadas: ${categorized} movimiento(s) categorizados.`,
+      );
+      setBacklog((current) =>
+        current
+          ? {
+              ...current,
+              pendingTransactions: Math.max(0, current.pendingTransactions - categorized),
+            }
+          : current,
+      );
     } catch (acceptError) {
       setError(errorMessage(acceptError));
     } finally {
@@ -277,14 +329,26 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
       <div className="card">
         <div className="card__header">
           <h3 className="card__title">Asistente</h3>
-          <button
-            type="button"
-            className="button"
-            onClick={() => void askAssistant()}
-            disabled={!assistantEnabled || busy}
-          >
-            Proponer categorías
-          </button>
+          <div className="row">
+            {backlog && backlog.remainingGroups > 0 ? (
+              <button
+                type="button"
+                className="button"
+                onClick={() => void askAssistant(true)}
+                disabled={!assistantEnabled || busy}
+              >
+                Seguir con los {Math.min(backlog.remainingGroups, 25)} siguientes
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="button"
+              onClick={() => void askAssistant(false)}
+              disabled={!assistantEnabled || busy}
+            >
+              {suggestions === null ? "Proponer categorías" : "Empezar de nuevo"}
+            </button>
+          </div>
         </div>
         <div className="card__body stack">
           {!assistantEnabled ? (
@@ -293,10 +357,21 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
             </span>
           ) : null}
 
+          {backlog ? (
+            <span className="small muted">
+              {backlog.pendingTransactions} movimiento(s) sin categoría en{" "}
+              {backlog.pendingGroups} comercio(s) distinto(s). Se pregunta por los comercios
+              que más movimientos arrastran, y aceptar una propuesta ordena el grupo entero.{" "}
+              {backlog.remainingGroups > 0
+                ? `Quedan ${backlog.remainingGroups} comercio(s) por preguntar.`
+                : "No queda ningún comercio por preguntar."}
+            </span>
+          ) : null}
+
           {suggestions?.length === 0 ? (
             <span className="small muted">
-              El modelo no ha propuesto nada nuevo: no queda nada pendiente o no ha sabido
-              clasificarlo.
+              El modelo no ha propuesto nada en esta tanda: o no queda nada pendiente, o no ha
+              sabido clasificar lo que se le ha enseñado.
             </span>
           ) : null}
 
@@ -304,8 +379,9 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
             <>
               <div className="row">
                 <span className="small muted" style={{ flex: 1 }}>
-                  El modelo reconoció el comercio en estas {confidentSuggestions.length}. Aceptar
-                  una también enseña la regla correspondiente.
+                  El modelo reconoció el comercio en {confidentSuggestions.length} de ellas, que
+                  cubren {confidentSuggestions.reduce((total, item) => total + item.transactionCount, 0)}{" "}
+                  movimiento(s). Aceptar una enseña su regla y ordena el grupo entero.
                 </span>
                 <button
                   type="button"
@@ -320,6 +396,9 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
               {confidentSuggestions.map((suggestion) => (
                 <div key={suggestion.transactionId} className="row" style={{ gap: 12 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>{suggestion.description}</span>
+                  {suggestion.transactionCount > 1 ? (
+                    <span className="badge">{suggestion.transactionCount} movimientos</span>
+                  ) : null}
                   <span
                     className="tabular"
                     style={{ color: isNegative(suggestion.amount) ? "var(--expense)" : "var(--income)" }}
@@ -351,6 +430,9 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
               {doubtfulSuggestions.map((suggestion) => (
                 <div key={suggestion.transactionId} className="row" style={{ gap: 12 }}>
                   <span style={{ flex: 1, minWidth: 0 }}>{suggestion.description}</span>
+                  {suggestion.transactionCount > 1 ? (
+                    <span className="badge">{suggestion.transactionCount} movimientos</span>
+                  ) : null}
                   <span
                     className="tabular"
                     style={{ color: isNegative(suggestion.amount) ? "var(--expense)" : "var(--income)" }}

@@ -310,6 +310,22 @@ export interface Suggestion {
   confidence: number;
   /** El modelo no lo tiene claro: hay que revisarlo antes de aceptarlo. */
   needsReview: boolean;
+  /** Patrón que aprendería la regla al aceptar; identifica al grupo. */
+  pattern: string;
+  /** Movimientos pendientes que esta propuesta ordena de golpe. */
+  transactionCount: number;
+}
+
+export interface SuggestionBatch {
+  suggestions: Suggestion[];
+  /** Movimientos sin categoría en toda la base. */
+  pendingTransactions: number;
+  /** Comercios distintos entre esos movimientos. */
+  pendingGroups: number;
+  /** Comercios preguntados en esta tanda; se devuelven para avanzar. */
+  askedPatterns: string[];
+  /** Comercios que quedan por preguntar. */
+  remainingGroups: number;
 }
 
 export interface AppInfo {
