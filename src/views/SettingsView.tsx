@@ -365,11 +365,13 @@ export function SettingsView({
           </p>
 
           <div className="banner banner--warning">
-            Es la única salida a internet de la aplicación aparte del modelo. Sale <strong>solo el
-            nombre del comercio</strong> («mercadona», «leroy merlin»): nunca el concepto entero,
-            ni el importe, ni la fecha, ni la cuenta. Y no se consulta nada de un movimiento que
+            Es la única salida a internet de la aplicación aparte del modelo. Se pregunta a
+            DuckDuckGo y, si no contesta, a la Wikipedia en español. Sale <strong>solo el nombre
+            del comercio</strong> («mercadona», «leroy merlin»): nunca el concepto entero, ni el
+            importe, ni la fecha, ni la cuenta. Y no se consulta nada de un movimiento que
             parezca llevar el nombre de una persona —un Bizum, una transferencia, una nómina, un
-            alquiler—, porque ahí el nombre es de alguien y no de una marca.
+            alquiler—, porque ahí el nombre es de alguien y no de una marca. Cada marca se
+            pregunta una sola vez y la respuesta se guarda aquí.
           </div>
 
           {brands.data ? (
