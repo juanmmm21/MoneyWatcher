@@ -326,6 +326,16 @@ export interface SuggestionBatch {
   askedPatterns: string[];
   /** Comercios que quedan por preguntar. */
   remainingGroups: number;
+  /** Comercios de los que se ha sabido algo consultando fuera. */
+  brandsUsed: number;
+  /** Consultas de marca que no llegaron a responder. */
+  brandLookupsFailed: number;
+}
+
+export interface BrandLookupStatus {
+  enabled: boolean;
+  /** Marcas ya consultadas y guardadas en el equipo. */
+  cachedTerms: number;
 }
 
 export interface AppInfo {

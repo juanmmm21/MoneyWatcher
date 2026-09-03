@@ -8,7 +8,7 @@ import type { Category, Rule, RuleMatcher, Suggestion, SuggestionBatch } from ".
 /** Lo que queda por revisar; lo que hace falta para saber si el asistente ha mirado el histórico entero. */
 type Backlog = Pick<
   SuggestionBatch,
-  "pendingTransactions" | "pendingGroups" | "remainingGroups"
+  "pendingTransactions" | "pendingGroups" | "remainingGroups" | "brandsUsed" | "brandLookupsFailed"
 >;
 
 interface RulesViewProps {
@@ -123,6 +123,8 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
           pendingTransactions: batch.pendingTransactions,
           pendingGroups: batch.pendingGroups,
           remainingGroups: batch.remainingGroups,
+          brandsUsed: batch.brandsUsed,
+          brandLookupsFailed: batch.brandLookupsFailed,
         });
       } catch (assistantError) {
         setError(errorMessage(assistantError));
@@ -366,6 +368,20 @@ export function RulesView({ categories, assistantEnabled, dataVersion }: RulesVi
                 ? `Quedan ${backlog.remainingGroups} comercio(s) por preguntar.`
                 : "No queda ningún comercio por preguntar."}
             </span>
+          ) : null}
+
+          {backlog && backlog.brandsUsed > 0 ? (
+            <span className="small muted">
+              {backlog.brandsUsed} marca(s) identificadas en internet antes de preguntar al
+              modelo.
+            </span>
+          ) : null}
+
+          {backlog && backlog.brandLookupsFailed > 0 ? (
+            <div className="banner banner--warning">
+              {backlog.brandLookupsFailed} consulta(s) de marca no respondieron. Las propuestas
+              salen igual, pero de esos comercios el modelo ha ido a ciegas.
+            </div>
           ) : null}
 
           {suggestions?.length === 0 ? (

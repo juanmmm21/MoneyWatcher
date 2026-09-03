@@ -8,6 +8,7 @@ import type {
   Account,
   AppInfo,
   AssistantStatus,
+  BrandLookupStatus,
   ImportRecord,
   TransferSettings,
 } from "../types/ipc";
@@ -41,6 +42,7 @@ export function SettingsView({
   const imports = useAsync<ImportRecord[]>(() => api.listImports(10), [dataVersion]);
   const assistant = useAsync<AssistantStatus>(() => api.assistantStatus(), []);
   const transfers = useAsync<TransferSettings>(() => api.transferSettings(), [dataVersion]);
+  const brands = useAsync<BrandLookupStatus>(() => api.brandLookupStatus(), []);
 
   const [creatingAccount, setCreatingAccount] = useState(false);
   // Deshacer una importación borra sus movimientos y no hay vuelta atrás, así
@@ -52,6 +54,29 @@ export function SettingsView({
   // usuario hubiera elegido antes.
   const [endpointDraft, setEndpointDraft] = useState<string | null>(null);
   const [modelDraft, setModelDraft] = useState<string | null>(null);
+
+  const toggleBrandLookup = useCallback(
+    async (enabled: boolean) => {
+      setError(null);
+      try {
+        await api.setBrandLookup(enabled);
+        brands.reload();
+      } catch (toggleError) {
+        setError(errorMessage(toggleError));
+      }
+    },
+    [brands],
+  );
+
+  const forgetBrands = useCallback(async () => {
+    setError(null);
+    try {
+      await api.forgetBrandLookups();
+      brands.reload();
+    } catch (forgetError) {
+      setError(errorMessage(forgetError));
+    }
+  }, [brands]);
 
   const status = assistant.data;
   const stored = status?.provider;
@@ -312,6 +337,63 @@ export function SettingsView({
             </button>
             <button type="button" className="button button--ghost" onClick={() => assistant.reload()}>
               Comprobar conexión
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card__header">
+          <h3 className="card__title">Consultar marcas en internet</h3>
+          {brands.data ? (
+            <span className="badge">
+              <span
+                className="badge__dot"
+                style={{
+                  background: brands.data.enabled ? "var(--warning)" : "var(--text-faint)",
+                }}
+              />
+              {brands.data.enabled ? "activada" : "desactivada"}
+            </span>
+          ) : null}
+        </div>
+        <div className="card__body stack">
+          <p className="small muted" style={{ margin: 0 }}>
+            El modelo sabe qué es Mercadona y no sabe qué es la tienda de tu barrio, así que manda
+            a «Otros gastos» comercios que un buscador identifica en una línea. Con esto activado,
+            antes de pedirle propuestas se busca qué es cada marca y se le pasa la respuesta.
+          </p>
+
+          <div className="banner banner--warning">
+            Es la única salida a internet de la aplicación aparte del modelo. Sale <strong>solo el
+            nombre del comercio</strong> («mercadona», «leroy merlin»): nunca el concepto entero,
+            ni el importe, ni la fecha, ni la cuenta. Y no se consulta nada de un movimiento que
+            parezca llevar el nombre de una persona —un Bizum, una transferencia, una nómina, un
+            alquiler—, porque ahí el nombre es de alguien y no de una marca.
+          </div>
+
+          {brands.data ? (
+            <span className="small muted">
+              {brands.data.cachedTerms} marca(s) consultadas y guardadas en este equipo. Cada una
+              se pregunta una sola vez.
+            </span>
+          ) : null}
+
+          <div className="row">
+            <button
+              type="button"
+              className="button"
+              onClick={() => void toggleBrandLookup(!(brands.data?.enabled ?? false))}
+            >
+              {brands.data?.enabled ? "Desactivar consulta" : "Activar consulta"}
+            </button>
+            <button
+              type="button"
+              className="button button--ghost"
+              onClick={() => void forgetBrands()}
+              disabled={(brands.data?.cachedTerms ?? 0) === 0}
+            >
+              Olvidar lo consultado
             </button>
           </div>
         </div>

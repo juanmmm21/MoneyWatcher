@@ -6,6 +6,7 @@ import type {
   AppInfo,
   AssistantStatus,
   BankSummary,
+  BrandLookupStatus,
   CategorizationSummary,
   Category,
   CategorySlice,
@@ -118,4 +119,9 @@ export const api = {
     invoke<AiProvider>("set_assistant_settings", { provider }),
   suggestCategories: (skipPatterns: string[]) =>
     invoke<SuggestionBatch>("suggest_categories", { skipPatterns }),
+
+  brandLookupStatus: () => invoke<BrandLookupStatus>("brand_lookup_status"),
+  setBrandLookup: (enabled: boolean) =>
+    invoke<BrandLookupStatus>("set_brand_lookup", { enabled }),
+  forgetBrandLookups: () => invoke<number>("forget_brand_lookups"),
 };
