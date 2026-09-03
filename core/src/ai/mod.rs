@@ -28,16 +28,22 @@ pub const DEFAULT_OLLAMA_ENDPOINT: &str = "http://127.0.0.1:11434";
 /// Modelo por defecto.
 ///
 /// Medido con `examples/benchmark_assistant.rs` sobre 35 conceptos de banca
-/// española, en lotes de 25 como los que manda la app y con tres tiradas de
-/// resultado idéntico: `phi4` (14B) acierta 33, `gemma3` (4B) 31 y
-/// `qwen2.5:7b` 30; `llama3.2` (3B) ni siquiera responde al lote.
+/// española, en lotes de 25 como los que manda la app: `phi4` (14B) acierta 33,
+/// `gemma3` (4B) 32 y `qwen2.5:7b` 30 o 31 según la tirada; `llama3.2` (3B) ni
+/// siquiera responde al lote.
 ///
 /// Lo que decide no es el recuento de aciertos sino cuántos fallos vienen con
 /// confianza alta, porque son los que el usuario acepta en bloque sin mirar:
-/// `phi4` tiene uno y los otros dos tienen cuatro. Cuesta el doble de tiempo
-/// (~100 s por lote frente a ~30 s) y 9 GB de descarga, y sale a cuenta: pedir
+/// `phi4` responde a los 35 y las 33 que da por seguras son correctas, mientras
+/// que los otros dos dejan movimientos sin contestar. Cuesta el doble de tiempo
+/// (~120 s por lote frente a ~45 s) y 9 GB de descarga, y sale a cuenta: pedir
 /// sugerencias no es una operación interactiva, aceptar una equivocada sí
 /// ensucia el histórico y además enseña una regla mala.
+///
+/// Con la consulta de marcas encendida la diferencia entre modelos se estrecha:
+/// sobre 12 cadenas españolas menos conocidas, `gemma3` pasa de 6 a 12 aciertos
+/// y `phi4` de 8 a 10. Saber qué es un comercio es justo lo que le falta a un
+/// modelo pequeño.
 pub const DEFAULT_OLLAMA_MODEL: &str = "phi4:latest";
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
