@@ -106,6 +106,19 @@ The optional assistant sits strictly after this: it only ever sees movements no 
 receives description, counterparty and amount and nothing else, and its answers are filtered against
 the real category list before being shown as proposals.
 
+It is asked about merchants, not movements. `ai::group_pending` buckets the pending movements by the
+pattern a rule would be learned from and sends one representative per bucket, largest bucket first,
+so a batch of 25 questions can settle hundreds of movements; the command reports how many merchants
+are left and takes back the ones already asked about, so successive calls walk the whole backlog.
+Each answer has to quote the merchant it refers to and `resolve_index` places it on the line that
+actually contains it — a model that loses count of its own numbering would otherwise attach a
+confident category to the movement next to the right one.
+
+`ai::brands` is the only part that can reach a network other than the model, and only when the user
+turns it on: it looks up what a merchant is (DuckDuckGo, then Spanish Wikipedia), sends nothing but
+the merchant token, refuses tokens that come from concepts naming people, keeps only answers about
+businesses, and caches every result in `brand_lookups`. ADR 0008 has the reasoning.
+
 ## Frontend
 
 `src/lib/ipc.ts` is the only module that calls `invoke`, and `src/types/ipc.ts` mirrors the Rust
@@ -121,8 +134,10 @@ the whole grid.
 ## Privacy boundaries
 
 - No telemetry, no analytics, no crash reporting, no auto-update.
-- The only outbound request the app can make is to the assistant endpoint the user configures, and
-  the UI flags any endpoint that is not loopback.
+- The app makes two kinds of outbound request and both are off until the user turns them on: the
+  assistant endpoint they configure — the UI flags any endpoint that is not loopback — and the
+  merchant lookup, which sends one word per shop to two hard-coded endpoints and never a concept,
+  an amount, a date or an account (ADR 0008).
 - The content security policy in `src-tauri/tauri.conf.json` restricts the webview to its own
   origin.
 - Statement files are read from the path the user picks through the system dialog; the path is never
